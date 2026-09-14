@@ -26,8 +26,8 @@ export const useAuthStore = create<AuthState>()(
       register: async (input) => {
         set({ isLoading: true });
         try {
-          const user = await authService.signUp(input);
-          set({ user, isLoading: false });
+         const result = await authService.signUp(input);
+         set({ user: result.profile, isLoading: false });
         } catch (e) {
           set({ isLoading: false });
           throw e;
