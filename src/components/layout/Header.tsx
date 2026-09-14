@@ -1,18 +1,17 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Search, Heart, ShoppingBag, User, Menu, X } from "lucide-react";
 import { useCartCount, useCartStore } from "@/store/cartStore";
 import { useFavoritesStore } from "@/store/favoritesStore";
-import { NotificationBell } from "@/components/shared/NotificationBell";
 import { cn } from "@/lib/cn";
 
 const NAV_LINKS = [
   { label: "Accueil", to: "/" },
   { label: "Boutique", to: "/boutique" },
-  { label: "Catégories", to: "/categories" },
+  { label: "CatÃ©gories", to: "/categories" },
   { label: "Promotions", to: "/promotions" },
-  { label: "Nouveautés", to: "/nouveautes" },
+  { label: "NouveautÃ©s", to: "/nouveautes" },
   { label: "Contact", to: "/contact" },
 ];
 
@@ -89,8 +88,6 @@ export function Header() {
             <Heart size={20} />
             {favoritesCount > 0 && <CountBubble count={favoritesCount} />}
           </Link>
-
-          <NotificationBell />
 
           <button
             onClick={toggleCart}
@@ -212,3 +209,4 @@ function CountBubble({ count }: { count: number }) {
     </span>
   );
 }
+
