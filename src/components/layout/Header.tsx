@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Search, Heart, ShoppingBag, User, Menu, X, LogIn, UserPlus } from "lucide-react";
+import { Search, Heart, ShoppingBag, User, Menu, X } from "lucide-react";
 import { useCartCount, useCartStore } from "@/store/cartStore";
 import { useFavoritesStore } from "@/store/favoritesStore";
-import { useIsAuthenticated } from "@/store/authStore";
+import { NotificationBell } from "@/components/shared/NotificationBell";
 import { cn } from "@/lib/cn";
 
 const NAV_LINKS = [
@@ -21,10 +21,16 @@ export function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const cartCount = useCartCount();
-  const isAuthenticated = useIsAuthenticated();
   const favoritesCount = useFavoritesStore((s) => s.productIds.length);
   const toggleCart = useCartStore((s) => s.toggleCart);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen]);
 
   function submitSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -35,17 +41,17 @@ export function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-fitora-border bg-fitora-black/90 backdrop-blur-md">
-      <div className="container-fitora flex h-16 items-center justify-between gap-4 md:h-20">
+    <header className="sticky top-0 z-50 border-b border-fitora-border bg-fitora-black/95 backdrop-blur-md">
+      <div className="container-fitora flex h-16 items-center justify-between gap-2 sm:gap-3 md:h-20 md:gap-4">
         <button
-          className="md:hidden"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:hidden"
           onClick={() => setMobileOpen(true)}
           aria-label="Ouvrir le menu"
         >
           <Menu size={24} />
         </button>
 
-        <Link to="/" className="flex items-center gap-1 font-display text-2xl font-extrabold tracking-tight">
+        <Link to="/" className="flex min-w-0 items-center gap-0.5 font-display text-[1.35rem] font-extrabold tracking-tight sm:text-2xl">
           FIT<span className="text-fitora-green">ORA</span>
         </Link>
 
@@ -66,11 +72,11 @@ export function Header() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-1 md:gap-2">
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1 md:gap-2">
           <button
             onClick={() => setSearchOpen((v) => !v)}
             aria-label="Rechercher"
-            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/10"
+            className="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-white/10 sm:h-10 sm:w-10"
           >
             <Search size={20} />
           </button>
@@ -84,39 +90,24 @@ export function Header() {
             {favoritesCount > 0 && <CountBubble count={favoritesCount} />}
           </Link>
 
+          <NotificationBell />
+
           <button
             onClick={toggleCart}
             aria-label="Panier"
-            className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/10"
+            className="relative flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-white/10 sm:h-10 sm:w-10"
           >
             <ShoppingBag size={20} />
             {cartCount > 0 && <CountBubble count={cartCount} />}
           </button>
 
-          {isAuthenticated ? (
-            <Link
-              to="/compte"
-              aria-label="Mon compte"
-              className="hidden h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/10 sm:flex"
-            >
-              <User size={20} />
-            </Link>
-          ) : (
-            <div className="hidden items-center gap-2 sm:flex">
-              <Link
-                to="/login"
-                className="flex h-10 items-center gap-1.5 rounded-full px-4 text-sm font-medium text-fitora-white transition-colors hover:bg-white/10"
-              >
-                <LogIn size={16} /> Se connecter
-              </Link>
-              <Link
-                to="/register"
-                className="flex h-10 items-center gap-1.5 rounded-full bg-fitora-green px-4 text-sm font-semibold text-fitora-black transition-all hover:brightness-95"
-              >
-                <UserPlus size={16} /> Créer un compte
-              </Link>
-            </div>
-          )}
+          <Link
+            to="/compte"
+            aria-label="Mon compte"
+            className="hidden h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/10 sm:flex"
+          >
+            <User size={20} />
+          </Link>
         </div>
       </div>
 
@@ -163,10 +154,10 @@ export function Header() {
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "tween", duration: 0.25 }}
-              className="fixed inset-y-0 left-0 z-50 flex w-[78%] max-w-xs flex-col bg-fitora-charcoal p-6 md:hidden"
+              className="fixed inset-y-0 left-0 z-50 flex w-[min(86vw,340px)] max-w-full flex-col overflow-y-auto bg-fitora-charcoal px-5 pb-6 pt-5 shadow-2xl md:hidden sm:px-6"
             >
-              <div className="mb-8 flex items-center justify-between">
-                <span className="font-display text-xl font-extrabold">
+              <div className="mb-6 flex items-center justify-between sm:mb-8">
+                <span className="font-display text-lg font-extrabold sm:text-xl">
                   FIT<span className="text-fitora-green">ORA</span>
                 </span>
                 <button onClick={() => setMobileOpen(false)} aria-label="Fermer le menu">
@@ -190,7 +181,7 @@ export function Header() {
                   </NavLink>
                 ))}
               </nav>
-              <div className="mt-6 flex items-center gap-3 border-t border-fitora-border pt-6">
+              <div className="mt-5 flex flex-col gap-2 border-t border-fitora-border pt-5 sm:mt-6 sm:flex-row sm:gap-3 sm:pt-6">
                 <Link
                   to="/compte/favoris"
                   onClick={() => setMobileOpen(false)}
@@ -198,33 +189,14 @@ export function Header() {
                 >
                   <Heart size={16} /> Favoris
                 </Link>
-                {isAuthenticated ? (
-                  <Link
-                    to="/compte"
-                    onClick={() => setMobileOpen(false)}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-full border border-fitora-border py-2.5 text-sm"
-                  >
-                    <User size={16} /> Compte
-                  </Link>
-                ) : (
-                  <Link
-                    to="/login"
-                    onClick={() => setMobileOpen(false)}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-full border border-fitora-border py-2.5 text-sm"
-                  >
-                    <LogIn size={16} /> Connexion
-                  </Link>
-                )}
-              </div>
-              {!isAuthenticated && (
                 <Link
-                  to="/register"
+                  to="/compte"
                   onClick={() => setMobileOpen(false)}
-                  className="mt-3 flex items-center justify-center gap-2 rounded-full bg-fitora-green py-2.5 text-sm font-semibold text-fitora-black"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-full border border-fitora-border py-2.5 text-sm"
                 >
-                  <UserPlus size={16} /> Créer un compte
+                  <User size={16} /> Compte
                 </Link>
-              )}
+              </div>
             </motion.div>
           </>
         )}

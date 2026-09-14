@@ -34,6 +34,21 @@
     color: var(--color-fitora-white);
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  #root {
+    width: 100%;
+    min-width: 0;
+    overflow-x: clip;
+  }
+
+  img, video, canvas, svg {
+    max-width: 100%;
+  }
+
+  button, a, input, select, textarea {
+    -webkit-tap-highlight-color: transparent;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -91,9 +106,11 @@
   }
 
   .container-fitora {
+    width: 100%;
     max-width: 1400px;
     margin-inline: auto;
-    padding-inline: 1.25rem;
+    padding-inline: clamp(0.875rem, 4vw, 1.25rem);
+    min-width: 0;
   }
 
   @media (min-width: 768px) {
@@ -109,5 +126,36 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+
+/* FITORA mobile-first responsive refinements */
+@media (max-width: 767px) {
+  .container-fitora {
+    padding-inline: 1rem;
+  }
+
+  /* Prevent long product names, emails and URLs from creating horizontal overflow. */
+  h1, h2, h3, h4, p, a, dt, dd, span {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 480px) {
+  .container-fitora {
+    padding-inline: 0.875rem;
+  }
+
+  .input {
+    min-height: 44px;
+    padding: 0.65rem 0.8rem;
+    font-size: 0.8125rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .container-fitora {
+    padding-inline: 0.75rem;
   }
 }

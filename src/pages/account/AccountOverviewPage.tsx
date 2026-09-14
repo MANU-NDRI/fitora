@@ -19,15 +19,15 @@ export function AccountOverviewPage() {
   if (!user) return null;
 
   return (
-    <div className="space-y-8">
-      <div className="grid gap-4 sm:grid-cols-3">
+    <div className="space-y-5 sm:space-y-8">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatCard icon={Package} label="Commandes" value={orders.length} to="/compte/commandes" />
         <StatCard icon={Heart} label="Favoris" value={favoritesCount} to="/compte/favoris" />
         <StatCard icon={MapPin} label="Adresses" value="Gérer" to="/compte/adresses" isText />
       </div>
 
-      <div className="rounded-2xl bg-fitora-charcoal p-6">
-        <h2 className="mb-4 font-display text-lg font-bold">Informations personnelles</h2>
+      <div className="rounded-2xl bg-fitora-charcoal p-4 sm:p-6">
+        <h2 className="mb-3 font-display text-base font-bold sm:mb-4 sm:text-lg">Informations personnelles</h2>
         <dl className="grid gap-3 sm:grid-cols-2">
           <Info label="Nom complet" value={`${user.firstName} ${user.lastName}`} />
           <Info label="Email" value={user.email} />
@@ -43,8 +43,8 @@ export function AccountOverviewPage() {
       </div>
 
       {orders.length > 0 && (
-        <div className="rounded-2xl bg-fitora-charcoal p-6">
-          <div className="mb-4 flex items-center justify-between">
+        <div className="rounded-2xl bg-fitora-charcoal p-4 sm:p-6">
+          <div className="mb-3 flex items-center justify-between sm:mb-4">
             <h2 className="font-display text-lg font-bold">Dernières commandes</h2>
             <Link to="/compte/commandes" className="text-sm text-fitora-green hover:underline">
               Voir tout
@@ -54,7 +54,7 @@ export function AccountOverviewPage() {
             {orders.slice(0, 3).map((order) => (
               <li key={order.id} className="flex items-center justify-between py-3">
                 <div>
-                  <p className="text-sm font-semibold">{order.number}</p>
+                  <p className="max-w-[60%] truncate text-xs font-semibold sm:text-sm">{order.number}</p>
                   <p className="text-xs text-fitora-gray">
                     {new Date(order.createdAt).toLocaleDateString("fr-FR")}
                   </p>
@@ -87,13 +87,13 @@ function StatCard({
   return (
     <Link
       to={to}
-      className="flex items-center gap-3 rounded-2xl bg-fitora-charcoal p-5 transition-colors hover:bg-fitora-charcoal-light"
+      className="flex items-center gap-2.5 rounded-2xl bg-fitora-charcoal p-4 transition-colors hover:bg-fitora-charcoal-light sm:gap-3 sm:p-5"
     >
-      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-fitora-green/10 text-fitora-green">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fitora-green/10 text-fitora-green sm:h-11 sm:w-11">
         <Icon size={20} />
       </div>
       <div>
-        <p className={isText ? "font-display text-sm font-bold" : "font-display text-xl font-bold"}>
+        <p className={isText ? "font-display text-sm font-bold" : "font-display text-lg font-bold sm:text-xl"}>
           {value}
         </p>
         <p className="text-xs text-fitora-gray">{label}</p>
