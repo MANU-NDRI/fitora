@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Truck, ShieldCheck, Wallet, MessageCircle, ArrowRight } from "lucide-react";
+import { Truck, ShieldCheck, Wallet, MessageCircle, ArrowRight, LogIn, UserPlus } from "lucide-react";
 import type { Category, Product } from "@/types";
 import { getCategories } from "@/services/categoryService";
 import { getNewArrivals, getPopularProducts, getPromotions } from "@/services/productService";
 import { getShopSettings, DEFAULT_HERO_IMAGE } from "@/services/settingsService";
+import { useAuthStore } from "@/store/authStore";
 import { ProductCard } from "@/components/product/ProductCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
@@ -35,6 +36,7 @@ export function HomePage() {
   return (
     <div>
       <HeroSection heroImage={heroImage} />
+      <AuthCallToAction />
 
       <Section title="Catégories" subtitle="Trouvez votre discipline">
         {!categories ? (
@@ -64,6 +66,39 @@ export function HomePage() {
 
       <AdvantagesSection />
     </div>
+  );
+}
+
+function AuthCallToAction() {
+  const isAuthenticated = Boolean(useAuthStore((s) => s.user));
+
+  if (isAuthenticated) return null;
+
+  return (
+    <section className="border-b border-fitora-border bg-fitora-charcoal/60">
+      <div className="container-fitora flex flex-col items-center justify-between gap-4 py-6 md:flex-row md:py-7">
+        <div className="text-center md:text-left">
+          <p className="font-display text-base font-bold text-fitora-white">
+            Rejoignez FITORA pour commander
+          </p>
+          <p className="text-sm text-fitora-gray">
+            Créez votre compte pour suivre vos commandes, vos favoris et profiter de nos offres.
+          </p>
+        </div>
+        <div className="flex flex-shrink-0 gap-3">
+          <Link to="/login">
+            <Button variant="outline">
+              <LogIn size={16} /> Se connecter
+            </Button>
+          </Link>
+          <Link to="/register">
+            <Button>
+              <UserPlus size={16} /> Créer un compte
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </section>
   );
 }
 

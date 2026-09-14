@@ -210,6 +210,44 @@ create table order_items (
 
 create index order_items_order_id_idx on order_items (order_id);
 
+-- ---------------------------------------------------------------------------
+-- FAILLE ÉVITÉE : sans ce trigger, un client malveillant pourrait insérer un
+-- order_item avec n'importe quel `unit_price` de son choix (le prix affiché
+-- dans le navigateur n'est jamais fiable). Ce trigger ignore le prix envoyé
+-- par le client et le remplace systématiquement par le prix réel et actuel
+-- du produit en base — le prix payé provient donc toujours du catalogue,
+-- jamais du navigateur.
+-- ---------------------------------------------------------------------------
+create function enforce_authoritative_item_price()
+returns trigger as $$
+begin
+  select price into strict new.unit_price from products where id = new.product_id;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+create trigger order_items_enforce_price
+  before insert on order_items
+  for each row execute procedure enforce_authoritative_item_price();
+
+-- Recalcule le sous-total de la commande à partir des lignes réellement
+-- enregistrées (avec leur prix authentique), plutôt que de faire confiance
+-- au sous-total envoyé par le client à la création de la commande.
+create function recompute_order_subtotal()
+returns trigger as $$
+begin
+  update orders
+  set subtotal = coalesce((select sum(unit_price * quantity) from order_items where order_id = coalesce(new.order_id, old.order_id)), 0),
+      total = greatest(0, coalesce((select sum(unit_price * quantity) from order_items where order_id = coalesce(new.order_id, old.order_id)), 0) + delivery_fee - discount)
+  where id = coalesce(new.order_id, old.order_id);
+  return coalesce(new, old);
+end;
+$$ language plpgsql security definer;
+
+create trigger order_items_recompute_subtotal
+  after insert or update or delete on order_items
+  for each row execute procedure recompute_order_subtotal();
+
 -- Génère automatiquement un numéro de commande FIT-{année}-{séquence}.
 create sequence order_number_seq;
 
@@ -520,6 +558,30 @@ returns boolean as $$
     select 1 from profiles where id = auth.uid() and role = 'admin'
   );
 $$ language sql security definer stable;
+
+-- ---------------------------------------------------------------------------
+-- FAILLE CRITIQUE ÉVITÉE : la policy "Un client modifie son propre profil"
+-- ci-dessous autorise un client à modifier N'IMPORTE QUELLE colonne de sa
+-- propre ligne (RLS ne filtre pas par colonne), y compris `role`. Sans ce
+-- trigger, n'importe quel client authentifié pourrait s'auto-promouvoir
+-- administrateur avec un simple appel :
+--   supabase.from('profiles').update({ role: 'admin' }).eq('id', monId)
+-- Ce trigger annule silencieusement toute tentative de changer `role` tant
+-- que l'auteur de la modification n'est pas déjà administrateur.
+-- ---------------------------------------------------------------------------
+create function prevent_role_self_escalation()
+returns trigger as $$
+begin
+  if new.role is distinct from old.role and not is_admin() then
+    new.role := old.role;
+  end if;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+create trigger profiles_prevent_role_escalation
+  before update on profiles
+  for each row execute procedure prevent_role_self_escalation();
 
 -- --------------------------- profiles ---------------------------
 create policy "Un client lit son propre profil"

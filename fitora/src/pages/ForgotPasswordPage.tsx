@@ -1,21 +1,28 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Mail, CheckCircle2 } from "lucide-react";
-import { requestPasswordReset } from "@/services/authService";
+import { requestPasswordReset, AuthError } from "@/services/authService";
 import { Button } from "@/components/ui/Button";
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
+    setError(null);
     setSubmitting(true);
-    await requestPasswordReset(email.trim());
-    setSubmitting(false);
-    setSent(true);
+    try {
+      await requestPasswordReset(email.trim());
+      setSent(true);
+    } catch (e) {
+      setError(e instanceof AuthError ? e.message : "Une erreur est survenue. Réessayez.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -49,6 +56,7 @@ export function ForgotPasswordPage() {
             <Button type="submit" size="lg" className="w-full" disabled={submitting}>
               {submitting ? "Envoi..." : <><Mail size={16} /> Envoyer le lien</>}
             </Button>
+            {error && <p className="text-sm text-red-400">{error}</p>}
           </form>
         )}
 

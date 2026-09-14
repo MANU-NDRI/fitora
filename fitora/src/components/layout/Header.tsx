@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Search, Heart, ShoppingBag, User, Menu, X } from "lucide-react";
@@ -25,6 +26,13 @@ export function Header() {
   const toggleCart = useCartStore((s) => s.toggleCart);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen]);
+
   function submitSearch(e: React.FormEvent) {
     e.preventDefault();
     if (!searchValue.trim()) return;
@@ -34,6 +42,7 @@ export function Header() {
   }
 
   return (
+    <>
     <header className="sticky top-0 z-50 border-b border-fitora-border bg-fitora-black/90 backdrop-blur-md">
       <div className="container-fitora flex h-16 items-center justify-between gap-4 md:h-20">
         <button
@@ -130,8 +139,17 @@ export function Header() {
           </motion.div>
         )}
       </AnimatePresence>
+    </header>
 
-      {/* Mobile menu */}
+    {/*
+      Le menu mobile est rendu dans un portail directement sur <body>, en
+      dehors du <header>. Nécessaire car <header> utilise backdrop-blur
+      (backdrop-filter), qui crée un nouveau "containing block" CSS pour
+      tout descendant en position:fixed — sans ce portail, le panneau et son
+      fond semi-transparent restaient coincés dans la petite zone du header
+      au lieu de couvrir tout l'écran (bug visible sur iPhone/Safari).
+    */}
+    {createPortal(
       <AnimatePresence>
         {mobileOpen && (
           <>
@@ -140,14 +158,14 @@ export function Header() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setMobileOpen(false)}
-              className="fixed inset-0 z-40 bg-black/60 md:hidden"
+              className="fixed inset-0 z-[90] bg-black/60 md:hidden"
             />
             <motion.div
               initial={{ x: "-100%" }}
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "tween", duration: 0.25 }}
-              className="fixed inset-y-0 left-0 z-50 flex w-[78%] max-w-xs flex-col bg-fitora-charcoal p-6 md:hidden"
+              className="fixed inset-y-0 left-0 z-[95] flex w-[78%] max-w-xs flex-col overflow-y-auto bg-fitora-charcoal p-6 md:hidden"
             >
               <div className="mb-8 flex items-center justify-between">
                 <span className="font-display text-xl font-extrabold">
@@ -193,8 +211,10 @@ export function Header() {
             </motion.div>
           </>
         )}
-      </AnimatePresence>
-    </header>
+      </AnimatePresence>,
+      document.body
+    )}
+    </>
   );
 }
 
