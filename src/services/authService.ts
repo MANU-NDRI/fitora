@@ -214,6 +214,17 @@ export async function updateProfile(
   return mapProfile(data);
 }
 
+// Définit un nouveau mot de passe. À utiliser uniquement quand une session
+// de récupération est active (l'utilisateur vient de cliquer le lien reçu
+// par email depuis requestPasswordReset).
+export async function updatePassword(newPassword: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+  if (error) {
+    throw new AuthError(translateAuthError(error.message));
+  }
+}
+
 export async function signOut(): Promise<void> {
   const { error } = await supabase.auth.signOut();
 

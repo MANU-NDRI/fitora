@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Search, Heart, ShoppingBag, User, Menu, X } from "lucide-react";
+import { Search, Heart, ShoppingBag, User, Menu, X, LogIn, UserPlus } from "lucide-react";
 import { useCartCount, useCartStore } from "@/store/cartStore";
 import { useFavoritesStore } from "@/store/favoritesStore";
+import { useIsAuthenticated } from "@/store/authStore";
 import { cn } from "@/lib/cn";
 
 const NAV_LINKS = [
@@ -20,6 +21,7 @@ export function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const cartCount = useCartCount();
+  const isAuthenticated = useIsAuthenticated();
   const favoritesCount = useFavoritesStore((s) => s.productIds.length);
   const toggleCart = useCartStore((s) => s.toggleCart);
   const navigate = useNavigate();
@@ -91,13 +93,30 @@ export function Header() {
             {cartCount > 0 && <CountBubble count={cartCount} />}
           </button>
 
-          <Link
-            to="/compte"
-            aria-label="Mon compte"
-            className="hidden h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/10 sm:flex"
-          >
-            <User size={20} />
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              to="/compte"
+              aria-label="Mon compte"
+              className="hidden h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/10 sm:flex"
+            >
+              <User size={20} />
+            </Link>
+          ) : (
+            <div className="hidden items-center gap-2 sm:flex">
+              <Link
+                to="/login"
+                className="flex h-10 items-center gap-1.5 rounded-full px-4 text-sm font-medium text-fitora-white transition-colors hover:bg-white/10"
+              >
+                <LogIn size={16} /> Se connecter
+              </Link>
+              <Link
+                to="/register"
+                className="flex h-10 items-center gap-1.5 rounded-full bg-fitora-green px-4 text-sm font-semibold text-fitora-black transition-all hover:brightness-95"
+              >
+                <UserPlus size={16} /> Créer un compte
+              </Link>
+            </div>
+          )}
         </div>
       </div>
 
@@ -179,14 +198,33 @@ export function Header() {
                 >
                   <Heart size={16} /> Favoris
                 </Link>
-                <Link
-                  to="/compte"
-                  onClick={() => setMobileOpen(false)}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-full border border-fitora-border py-2.5 text-sm"
-                >
-                  <User size={16} /> Compte
-                </Link>
+                {isAuthenticated ? (
+                  <Link
+                    to="/compte"
+                    onClick={() => setMobileOpen(false)}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-full border border-fitora-border py-2.5 text-sm"
+                  >
+                    <User size={16} /> Compte
+                  </Link>
+                ) : (
+                  <Link
+                    to="/login"
+                    onClick={() => setMobileOpen(false)}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-full border border-fitora-border py-2.5 text-sm"
+                  >
+                    <LogIn size={16} /> Connexion
+                  </Link>
+                )}
               </div>
+              {!isAuthenticated && (
+                <Link
+                  to="/register"
+                  onClick={() => setMobileOpen(false)}
+                  className="mt-3 flex items-center justify-center gap-2 rounded-full bg-fitora-green py-2.5 text-sm font-semibold text-fitora-black"
+                >
+                  <UserPlus size={16} /> Créer un compte
+                </Link>
+              )}
             </motion.div>
           </>
         )}

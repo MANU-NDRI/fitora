@@ -12,7 +12,7 @@ interface AuthState {
     email: string;
     phone: string;
     password: string;
-  }) => Promise<void>;
+  }) => Promise<{ needsEmailConfirmation: boolean }>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   updateProfile: (updates: Partial<Pick<UserProfile, "firstName" | "lastName" | "phone">>) => Promise<void>;
@@ -26,8 +26,17 @@ export const useAuthStore = create<AuthState>()(
       register: async (input) => {
         set({ isLoading: true });
         try {
-         const result = await authService.signUp(input);
-         set({ user: result.profile, isLoading: false });
+          const result = await authService.signUp(input);
+          if (result.status === "confirmed") {
+            // Session Supabase réelle : on peut connecter l'utilisateur.
+            set({ user: result.profile, isLoading: false });
+            return { needsEmailConfirmation: false };
+          }
+          // Pas de session tant que l'email n'est pas confirmé : on ne
+          // connecte PAS l'utilisateur localement (il n'a pas de session
+          // Supabase valide, les appels authentifiés échoueraient).
+          set({ isLoading: false });
+          return { needsEmailConfirmation: true };
         } catch (e) {
           set({ isLoading: false });
           throw e;

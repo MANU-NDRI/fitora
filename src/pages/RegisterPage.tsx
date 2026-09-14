@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { UserPlus } from "lucide-react";
+import { UserPlus, MailCheck } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 import { Button } from "@/components/ui/Button";
@@ -17,6 +17,9 @@ export function RegisterPage() {
   });
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Bascule l'écran vers un message "vérifiez votre email" quand la
+  // confirmation est requise avant de pouvoir se connecter.
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const register = useAuthStore((s) => s.register);
   const pushToast = useToastStore((s) => s.push);
   const navigate = useNavigate();
@@ -47,15 +50,45 @@ export function RegisterPage() {
 
     setSubmitting(true);
     try {
-      await register(form);
-      pushToast("Compte créé", "success");
-      navigate(redirectTo, { replace: true });
+      const { needsEmailConfirmation } = await register(form);
+      if (needsEmailConfirmation) {
+        // Pas de session encore : on ne redirige pas vers une page protégée,
+        // on invite plutôt à confirmer l'email d'abord.
+        setAwaitingConfirmation(true);
+      } else {
+        pushToast("Compte créé", "success");
+        navigate(redirectTo, { replace: true });
+      }
     } catch (e) {
       if (e instanceof AuthError) setError(e.message);
       else setError("Une erreur est survenue. Réessayez.");
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (awaitingConfirmation) {
+    return (
+      <div className="container-fitora flex min-h-[70vh] items-center justify-center py-14">
+        <div className="w-full max-w-sm text-center">
+          <span className="font-display text-3xl font-extrabold tracking-tight">
+            FIT<span className="text-fitora-green">ORA</span>
+          </span>
+          <div className="mt-6 flex flex-col items-center gap-3 rounded-2xl border border-fitora-green/30 bg-fitora-green/5 p-6">
+            <MailCheck size={32} className="text-fitora-green" />
+            <h1 className="font-display text-lg font-bold">Vérifiez votre email</h1>
+            <p className="text-sm text-fitora-gray">
+              Un lien de confirmation vient d'être envoyé à{" "}
+              <strong className="text-fitora-white">{form.email}</strong>. Cliquez dessus pour
+              activer votre compte, puis connectez-vous.
+            </p>
+          </div>
+          <Link to="/login" className="mt-6 block text-sm text-fitora-gray hover:text-fitora-green">
+            ← Retour à la connexion
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
