@@ -1,124 +1,240 @@
+import { supabase } from "@/lib/supabase";
 import type { AppNotification } from "@/types";
-
-// ---------------------------------------------------------------------------
-// Préfigure une future table Supabase `notifications` (scope 'broadcast' ou
-// 'customer') + une table de suivi de lecture par utilisateur. En mode démo,
-// tout est stocké dans le localStorage du navigateur :
-// - les diffusions générales (promotions) sont globales à la boutique ;
-// - les notifications ciblées (statut de commande, réponse à un message)
-//   sont rattachées à un customer_id ;
-// - l'état "lu" est propre à chaque utilisateur.
-// ---------------------------------------------------------------------------
-
-const BROADCASTS_KEY = "fitora-notifications-broadcast";
-const customerKey = (customerId: string) => `fitora-notifications-customer-${customerId}`;
-const readKey = (customerId: string) => `fitora-notifications-read-${customerId}`;
-
-function delay<T>(value: T, ms = 150): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
-}
-
-function readList(key: string): AppNotification[] {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as AppNotification[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeList(key: string, list: AppNotification[]) {
-  localStorage.setItem(key, JSON.stringify(list));
-}
-
-function readReadIds(customerId: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(readKey(customerId));
-    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function writeReadIds(customerId: string, ids: Set<string>) {
-  localStorage.setItem(readKey(customerId), JSON.stringify([...ids]));
-}
 
 export interface NotificationView extends AppNotification {
   read: boolean;
 }
 
-// --------------------------- Émission (admin / système) --------------------
+interface NotificationRow {
+  id: string;
+  scope: "broadcast" | "customer";
+  customer_id: string | null;
+  title: string;
+  message: string;
+  link: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+interface NotificationReadRow {
+  notification_id: string;
+  customer_id: string;
+  read_at: string;
+}
+
+function mapNotification(row: NotificationRow): AppNotification {
+  return {
+    id: row.id,
+    scope: row.scope,
+    customerId: row.customer_id ?? undefined,
+    title: row.title,
+    message: row.message,
+    link: row.link ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+async function getCurrentUserId(): Promise<string | null> {
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error || !data.user) {
+    return null;
+  }
+
+  return data.user.id;
+}
+
+// ---------------------------------------------------------------------------
+// Émission
+// ---------------------------------------------------------------------------
 
 export async function adminSendBroadcast(input: {
   title: string;
   message: string;
   link?: string;
 }): Promise<AppNotification> {
-  const notification: AppNotification = {
-    id: `notif-${Date.now()}`,
-    scope: "broadcast",
-    title: input.title,
-    message: input.message,
-    link: input.link,
-    createdAt: new Date().toISOString(),
-  };
-  writeList(BROADCASTS_KEY, [notification, ...readList(BROADCASTS_KEY)]);
-  return delay(notification);
+  const userId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from("notifications")
+    .insert({
+      scope: "broadcast",
+      customer_id: null,
+      title: input.title.trim(),
+      message: input.message.trim(),
+      link: input.link?.trim() || null,
+      created_by: userId,
+    })
+    .select(
+      "id, scope, customer_id, title, message, link, created_by, created_at",
+    )
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapNotification(data as NotificationRow);
 }
 
 export async function adminGetBroadcasts(): Promise<AppNotification[]> {
-  return delay(readList(BROADCASTS_KEY));
+  const { data, error } = await supabase
+    .from("notifications")
+    .select(
+      "id, scope, customer_id, title, message, link, created_by, created_at",
+    )
+    .eq("scope", "broadcast")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).map((row) =>
+    mapNotification(row as NotificationRow),
+  );
 }
 
 export async function sendCustomerNotification(
   customerId: string,
-  input: { title: string; message: string; link?: string }
+  input: {
+    title: string;
+    message: string;
+    link?: string;
+  },
 ): Promise<AppNotification> {
-  const notification: AppNotification = {
-    id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    scope: "customer",
-    customerId,
-    title: input.title,
-    message: input.message,
-    link: input.link,
-    createdAt: new Date().toISOString(),
-  };
-  const key = customerKey(customerId);
-  writeList(key, [notification, ...readList(key)]);
-  return delay(notification);
+  const { data, error } = await supabase
+    .from("notifications")
+    .insert({
+      scope: "customer",
+      customer_id: customerId,
+      title: input.title.trim(),
+      message: input.message.trim(),
+      link: input.link?.trim() || null,
+    })
+    .select(
+      "id, scope, customer_id, title, message, link, created_by, created_at",
+    )
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapNotification(data as NotificationRow);
 }
 
-// --------------------------- Lecture (client) -------------------------------
+// ---------------------------------------------------------------------------
+// Lecture côté client
+// ---------------------------------------------------------------------------
 
-export async function getNotificationsForUser(customerId: string): Promise<NotificationView[]> {
-  const broadcasts = readList(BROADCASTS_KEY);
-  const personal = readList(customerKey(customerId));
-  const readIds = readReadIds(customerId);
+export async function getNotificationsForUser(
+  customerId: string,
+): Promise<NotificationView[]> {
+  const currentUserId = await getCurrentUserId();
 
-  const all = [...broadcasts, ...personal]
-    .map((n) => ({ ...n, read: readIds.has(n.id) }))
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  if (!currentUserId) {
+    throw new Error("Vous devez être connecté.");
+  }
 
-  return delay(all);
+  if (currentUserId !== customerId) {
+    throw new Error("Utilisateur non autorisé.");
+  }
+
+  const { data: notifications, error: notificationsError } = await supabase
+    .from("notifications")
+    .select(
+      "id, scope, customer_id, title, message, link, created_by, created_at",
+    )
+    .or(`scope.eq.broadcast,customer_id.eq.${customerId}`)
+    .order("created_at", { ascending: false });
+
+  if (notificationsError) {
+    throw notificationsError;
+  }
+
+  const { data: reads, error: readsError } = await supabase
+    .from("notification_reads")
+    .select("notification_id, customer_id, read_at")
+    .eq("customer_id", customerId);
+
+  if (readsError) {
+    throw readsError;
+  }
+
+  const readIds = new Set(
+    (reads ?? []).map(
+      (row) => (row as NotificationReadRow).notification_id,
+    ),
+  );
+
+  return (notifications ?? []).map((row) => {
+    const notification = mapNotification(row as NotificationRow);
+
+    return {
+      ...notification,
+      read: readIds.has(notification.id),
+    };
+  });
 }
 
 export async function getUnreadCount(customerId: string): Promise<number> {
-  const all = await getNotificationsForUser(customerId);
-  return all.filter((n) => !n.read).length;
+  const notifications = await getNotificationsForUser(customerId);
+  return notifications.filter((notification) => !notification.read).length;
 }
 
-export async function markAsRead(customerId: string, notificationId: string): Promise<void> {
-  const ids = readReadIds(customerId);
-  ids.add(notificationId);
-  writeReadIds(customerId, ids);
-  return delay(undefined, 50);
+export async function markAsRead(
+  customerId: string,
+  notificationId: string,
+): Promise<void> {
+  const currentUserId = await getCurrentUserId();
+
+  if (!currentUserId) {
+    throw new Error("Vous devez être connecté.");
+  }
+
+  if (currentUserId !== customerId) {
+    throw new Error("Utilisateur non autorisé.");
+  }
+
+  const { error } = await supabase
+    .from("notification_reads")
+    .upsert(
+      {
+        notification_id: notificationId,
+        customer_id: customerId,
+      },
+      {
+        onConflict: "notification_id,customer_id",
+      },
+    );
+
+  if (error) {
+    throw error;
+  }
 }
 
 export async function markAllAsRead(customerId: string): Promise<void> {
-  const all = await getNotificationsForUser(customerId);
-  const ids = readReadIds(customerId);
-  all.forEach((n) => ids.add(n.id));
-  writeReadIds(customerId, ids);
-  return delay(undefined, 50);
+  const notifications = await getNotificationsForUser(customerId);
+
+  const unread = notifications.filter((notification) => !notification.read);
+
+  if (unread.length === 0) {
+    return;
+  }
+
+  const rows = unread.map((notification) => ({
+    notification_id: notification.id,
+    customer_id: customerId,
+  }));
+
+  const { error } = await supabase
+    .from("notification_reads")
+    .upsert(rows, {
+      onConflict: "notification_id,customer_id",
+    });
+
+  if (error) {
+    throw error;
+  }
 }
