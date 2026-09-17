@@ -43,7 +43,6 @@ export function AdminProductsPage() {
       await adminCreateProduct({
         name: values.name,
         categoryId: values.categoryId,
-        categoryName: category.name,
         sport: values.sport,
         description: values.description,
         features: values.features.split(",").map((f) => f.trim()).filter(Boolean),
@@ -70,7 +69,6 @@ export function AdminProductsPage() {
       await adminUpdateProduct(id, {
         name: values.name,
         categoryId: values.categoryId,
-        categoryName: category.name,
         sport: values.sport,
         description: values.description,
         features: values.features.split(",").map((f) => f.trim()).filter(Boolean),
