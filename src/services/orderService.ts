@@ -1,61 +1,118 @@
+import { supabase } from "@/lib/supabase";
 import type { Address, CartLine, Order, OrderStatus, PaymentMethod, ReceptionMode, ShippingMethod } from "@/types";
-import { PRODUCTS } from "@/services/mockData";
 import { sendCustomerNotification } from "@/services/notificationService";
 
-// ---------------------------------------------------------------------------
-// Simule les tables Supabase `orders` + `order_items` + la logique de
-// réservation de stock (section 30 du cahier des charges). Les commandes
-// sont stockées par client dans le localStorage. Le stock (`stockReserved`)
-// est décrémenté directement sur les données en mémoire de `mockData.ts`
-// le temps de la session, pour refléter la réservation de 24h côté catalogue.
-// ---------------------------------------------------------------------------
+type OrderRow = {
+  id: string;
+  number: string;
+  customer_id: string;
+  subtotal: number | string;
+  delivery_fee: number | string;
+  discount: number | string;
+  discount_code: string | null;
+  total: number | string;
+  status: OrderStatus;
+  payment_method: PaymentMethod;
+  reception_mode: ReceptionMode;
+  shipping_method: ShippingMethod | null;
+  estimated_delivery_days: number | null;
+  note: string | null;
+  created_at: string;
+  address_id: string | null;
+  addresses: AddressRow | AddressRow[] | null;
+  order_items: OrderItemRow[] | null;
+};
 
-function ordersKey(userId: string) {
-  return `fitora-orders-${userId}`;
+type AddressRow = {
+  id: string;
+  label: string;
+  full_name: string;
+  phone: string;
+  whatsapp: string | null;
+  city: string;
+  commune: string;
+  quartier: string;
+  address: string;
+  is_default: boolean;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+type OrderItemRow = {
+  id: string;
+  product_id: string;
+  product_name: string;
+  image: string;
+  variant_label: string;
+  quantity: number;
+  unit_price: number | string;
+};
+
+function asAddress(value: OrderRow["addresses"]): AddressRow | null {
+  return Array.isArray(value) ? value[0] ?? null : value;
 }
 
-const GLOBAL_ORDERS_KEY = "fitora-orders-all";
-
-function readGlobalOrders(): Order[] {
-  try {
-    const raw = localStorage.getItem(GLOBAL_ORDERS_KEY);
-    return raw ? (JSON.parse(raw) as Order[]) : [];
-  } catch {
-    return [];
-  }
+function mapAddress(row: AddressRow | null): Address | undefined {
+  if (!row) return undefined;
+  return {
+    id: row.id,
+    label: row.label,
+    fullName: row.full_name,
+    phone: row.phone,
+    whatsapp: row.whatsapp ?? undefined,
+    city: row.city,
+    commune: row.commune,
+    quartier: row.quartier,
+    address: row.address,
+    isDefault: row.is_default,
+    latitude: row.latitude ?? undefined,
+    longitude: row.longitude ?? undefined,
+  };
 }
 
-function writeGlobalOrders(orders: Order[]) {
-  localStorage.setItem(GLOBAL_ORDERS_KEY, JSON.stringify(orders));
+function mapOrder(row: OrderRow): Order {
+  return {
+    id: row.id,
+    number: row.number,
+    customerId: row.customer_id,
+    items: (row.order_items ?? []).map((item) => ({
+      id: item.id,
+      productId: item.product_id,
+      productName: item.product_name,
+      image: item.image,
+      variantLabel: item.variant_label,
+      quantity: item.quantity,
+      unitPrice: Number(item.unit_price),
+    })),
+    subtotal: Number(row.subtotal),
+    deliveryFee: Number(row.delivery_fee),
+    discount: Number(row.discount),
+    discountCode: row.discount_code ?? undefined,
+    total: Number(row.total),
+    status: row.status,
+    paymentMethod: row.payment_method,
+    receptionMode: row.reception_mode,
+    shippingMethod: row.shipping_method ?? undefined,
+    estimatedDeliveryDays: row.estimated_delivery_days ?? undefined,
+    address: mapAddress(asAddress(row.addresses)),
+    note: row.note ?? undefined,
+    createdAt: row.created_at,
+  };
 }
 
-function delay<T>(value: T, ms = 400): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
-}
+const ORDER_SELECT = "*, addresses(*), order_items(*)";
 
-function readOrders(userId: string): Order[] {
-  try {
-    const raw = localStorage.getItem(ordersKey(userId));
-    return raw ? (JSON.parse(raw) as Order[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeOrders(userId: string, orders: Order[]) {
-  localStorage.setItem(ordersKey(userId), JSON.stringify(orders));
-}
-
-function generateOrderNumber(): string {
-  const year = new Date().getFullYear();
-  const sequence = Math.floor(100000 + Math.random() * 899999);
-  return `FIT-${year}-${sequence}`;
+async function fetchOrder(orderId: string, customerId?: string): Promise<Order | null> {
+  let query = supabase.from("orders").select(ORDER_SELECT).eq("id", orderId);
+  if (customerId) query = query.eq("customer_id", customerId);
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  return data ? mapOrder(data as unknown as OrderRow) : null;
 }
 
 export interface CreateOrderInput {
   userId: string;
   lines: CartLine[];
-  /** Frais d'expédition déjà calculés (standard ou express, majoration incluse). */
   deliveryFee: number;
   discount?: number;
   discountCode?: string;
@@ -67,97 +124,88 @@ export interface CreateOrderInput {
   note?: string;
 }
 
+export class OrderError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OrderError";
+  }
+}
+
 export async function createOrder(input: CreateOrderInput): Promise<Order> {
-  const subtotal = input.lines.reduce((sum, l) => sum + l.price * l.quantity, 0);
-  const deliveryFee = input.receptionMode === "retrait" ? 0 : input.deliveryFee;
-  const discount = Math.min(input.discount ?? 0, subtotal + deliveryFee);
-  const total = Math.max(0, subtotal + deliveryFee - discount);
-
-  const order: Order = {
-    id: `order-${Date.now()}`,
-    number: generateOrderNumber(),
-    customerId: input.userId,
-    items: input.lines.map((l) => ({
-      id: l.id,
-      productId: l.productId,
-      productName: l.name,
-      image: l.image,
-      variantLabel: [l.size, l.shoeSize && `Pointure ${l.shoeSize}`, l.color].filter(Boolean).join(" · "),
-      quantity: l.quantity,
-      unitPrice: l.price,
-    })),
-    subtotal,
-    deliveryFee,
-    discount,
-    discountCode: input.discountCode,
-    total,
-    status: "pending_payment",
-    paymentMethod: input.paymentMethod,
-    receptionMode: input.receptionMode,
-    shippingMethod: input.receptionMode === "livraison" ? input.shippingMethod : undefined,
-    estimatedDeliveryDays: input.receptionMode === "livraison" ? input.estimatedDeliveryDays : undefined,
-    address: input.address,
-    note: input.note,
-    createdAt: new Date().toISOString(),
-  };
-
-  // Réservation de stock : on incrémente stockReserved sur les variantes
-  // concernées (libéré automatiquement côté back-end réel après 24h si le
-  // paiement n'est pas confirmé — logique à implémenter en base via un
-  // trigger/cron Supabase).
-  for (const line of input.lines) {
-    const product = PRODUCTS.find((p) => p.id === line.productId);
-    const variant = product?.variants.find((v) => v.id === line.variantId);
-    if (variant) {
-      variant.stockReserved += line.quantity;
-    }
+  if (input.lines.length === 0) throw new OrderError("Le panier est vide.");
+  if (input.lines.some((line) => !line.variantId || !Number.isInteger(line.quantity) || line.quantity <= 0)) {
+    throw new OrderError("Une ligne de commande est invalide.");
   }
 
-  const orders = readOrders(input.userId);
-  writeOrders(input.userId, [order, ...orders]);
-  writeGlobalOrders([order, ...readGlobalOrders()]);
-  return delay(order);
+  const { data: orderId, error } = await supabase.rpc("create_order_transaction", {
+    p_customer_id: input.userId,
+    p_items: input.lines.map((line) => ({
+      product_id: line.productId,
+      variant_id: line.variantId,
+      quantity: line.quantity,
+    })),
+    p_delivery_fee: input.receptionMode === "retrait" ? 0 : Math.max(0, input.deliveryFee),
+    p_discount: Math.max(0, input.discount ?? 0),
+    p_discount_code: input.discountCode ?? null,
+    p_payment_method: input.paymentMethod,
+    p_reception_mode: input.receptionMode,
+    p_shipping_method: input.receptionMode === "livraison" ? input.shippingMethod ?? null : null,
+    p_estimated_delivery_days: input.receptionMode === "livraison" ? input.estimatedDeliveryDays ?? null : null,
+    p_address: input.receptionMode === "livraison" && input.address ? {
+      label: input.address.label,
+      full_name: input.address.fullName,
+      phone: input.address.phone,
+      whatsapp: input.address.whatsapp ?? null,
+      city: input.address.city,
+      commune: input.address.commune,
+      quartier: input.address.quartier,
+      address: input.address.address,
+      latitude: input.address.latitude ?? null,
+      longitude: input.address.longitude ?? null,
+    } : null,
+    p_note: input.note ?? null,
+  });
+
+  if (error) throw new OrderError(error.message);
+  if (typeof orderId !== "string") throw new OrderError("La commande n'a pas été créée.");
+
+  const order = await fetchOrder(orderId, input.userId);
+  if (!order) throw new OrderError("Commande créée mais impossible à relire.");
+  return order;
 }
 
 export async function getOrders(userId: string): Promise<Order[]> {
-  return delay(readOrders(userId));
+  const { data, error } = await supabase
+    .from("orders")
+    .select(ORDER_SELECT)
+    .eq("customer_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as unknown as OrderRow[]).map(mapOrder);
 }
 
 export async function getOrderById(userId: string, orderId: string): Promise<Order | null> {
-  const order = readOrders(userId).find((o) => o.id === orderId) ?? null;
-  return delay(order);
+  return fetchOrder(orderId, userId);
 }
 
-// --------------------------- Vue administrateur ---------------------------
-
 export async function adminGetAllOrders(): Promise<Order[]> {
-  return delay(readGlobalOrders());
+  const { data, error } = await supabase.from("orders").select(ORDER_SELECT).order("created_at", { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as unknown as OrderRow[]).map(mapOrder);
 }
 
 export async function adminUpdateOrderStatus(orderId: string, status: OrderStatus): Promise<Order | null> {
-  const globalOrders = readGlobalOrders();
-  const order = globalOrders.find((o) => o.id === orderId);
-  if (!order) return delay(null);
-  order.status = status;
-  writeGlobalOrders(globalOrders);
-
-  // Répercute la mise à jour sur la copie stockée côté client.
-  const customerOrders = readOrders(order.customerId);
-  const customerOrder = customerOrders.find((o) => o.id === orderId);
-  if (customerOrder) {
-    customerOrder.status = status;
-    writeOrders(order.customerId, customerOrders);
-  }
-
-  // Notifie automatiquement le client de l'évolution de sa commande, afin
-  // qu'il puisse en suivre le déroulé jusqu'à la livraison.
+  const { data, error } = await supabase.from("orders").update({ status }).eq("id", orderId).select("id, customer_id").maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const order = await fetchOrder(orderId);
+  if (!order) return null;
   await sendCustomerNotification(order.customerId, {
     title: `Commande ${order.number}`,
     message: `Votre commande est maintenant : ${ORDER_STATUS_LABELS[status]}.`,
     link: `/compte/commandes/${order.id}`,
   });
-
-  return delay(order);
+  return order;
 }
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
