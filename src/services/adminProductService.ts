@@ -4,7 +4,7 @@ import { mapProduct } from './catalogMapper';
 import { slugify } from '@/lib/format';
 
 export type ProductInput = Omit<Product, 'id' | 'slug' | 'reviews' | 'reviewCount' | 'rating' | 'createdAt' | 'salesCount'>;
-const SELECT = '*, categories!inner(id,slug,name,sport,image,order_index,published), product_images(id,url,position), product_variants(id,size,color,color_hex,shoe_size,stock_available,stock_reserved,sku), product_reviews(id,author,rating,comment,created_at,customer_id,order_id)';
+const SELECT = '*, categories(id,slug,name,sport,image,order_index,published), product_images(id,url,position), product_variants(id,size,color,color_hex,shoe_size,stock_available,stock_reserved,sku), product_reviews(id,author,rating,comment,created_at,customer_id,order_id)';
 
 async function readProduct(id: string): Promise<Product | null> {
   const { data, error } = await requireSupabase().from('products').select(SELECT).eq('id', id).maybeSingle();
