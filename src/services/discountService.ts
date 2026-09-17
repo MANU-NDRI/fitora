@@ -1,32 +1,78 @@
+import { supabase } from "@/lib/supabase";
 import type { DiscountCode, DiscountType } from "@/types";
 import { sendCustomerNotification } from "@/services/notificationService";
 
-// Préfigure une future table Supabase `discount_codes`.
-const STORAGE_KEY = "fitora-discount-codes";
-
-function delay<T>(value: T, ms = 200): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
+interface DiscountCodeRow {
+  id: string;
+  code: string;
+  type: DiscountType;
+  value: number | string;
+  customer_id: string | null;
+  max_uses: number;
+  used_count: number;
+  expires_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  profiles?: {
+    full_name: string | null;
+  } | null;
 }
 
-function read(): DiscountCode[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as DiscountCode[]) : [];
-  } catch {
-    return [];
+function mapDiscountCode(row: DiscountCodeRow): DiscountCode {
+  return {
+    id: row.id,
+    code: row.code,
+    type: row.type,
+    value: Number(row.value),
+    customerId: row.customer_id ?? undefined,
+    customerName: row.profiles?.full_name ?? undefined,
+    maxUses: Number(row.max_uses),
+    usedCount: Number(row.used_count),
+    expiresAt: row.expires_at ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+async function getCurrentUserId(): Promise<string | null> {
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error || !data.user) {
+    return null;
   }
-}
 
-function write(codes: DiscountCode[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(codes));
+  return data.user.id;
 }
 
 function generateCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "FITORA-";
-  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+
   return code;
 }
+
+const discountSelect = `
+  id,
+  code,
+  type,
+  value,
+  customer_id,
+  max_uses,
+  used_count,
+  expires_at,
+  created_by,
+  created_at,
+  profiles:customer_id (
+    full_name
+  )
+`;
+
+// ---------------------------------------------------------------------------
+// ADMIN
+// ---------------------------------------------------------------------------
 
 export async function adminCreateDiscountCode(input: {
   code?: string;
@@ -37,24 +83,47 @@ export async function adminCreateDiscountCode(input: {
   maxUses?: number;
   expiresAt?: string;
 }): Promise<DiscountCode> {
-  const discountCode: DiscountCode = {
-    id: `code-${Date.now()}`,
-    code: (input.code?.trim() || generateCode()).toUpperCase(),
-    type: input.type,
-    value: input.value,
-    customerId: input.customerId,
-    customerName: input.customerName,
-    maxUses: Math.max(1, input.maxUses ?? 1),
-    usedCount: 0,
-    expiresAt: input.expiresAt,
-    createdAt: new Date().toISOString(),
-  };
+  const createdBy = await getCurrentUserId();
 
-  write([discountCode, ...read()]);
+  if (!createdBy) {
+    throw new Error("Vous devez être connecté.");
+  }
+
+  const code = (input.code?.trim() || generateCode()).toUpperCase();
+  const maxUses = Math.max(1, input.maxUses ?? 1);
+  const value = Math.max(0, input.value);
+
+  const { data, error } = await supabase
+    .from("discount_codes")
+    .insert({
+      code,
+      type: input.type,
+      value,
+      customer_id: input.customerId ?? null,
+      max_uses: maxUses,
+      used_count: 0,
+      expires_at: input.expiresAt || null,
+      created_by: createdBy,
+    })
+    .select(discountSelect)
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("Ce code promo existe déjà.");
+    }
+
+    throw error;
+  }
+
+  const discountCode = mapDiscountCode(data as unknown as DiscountCodeRow);
 
   if (discountCode.customerId) {
     const valueLabel =
-      discountCode.type === "percentage" ? `${discountCode.value}%` : `${discountCode.value} FCFA`;
+      discountCode.type === "percentage"
+        ? `${discountCode.value}%`
+        : `${discountCode.value} FCFA`;
+
     await sendCustomerNotification(discountCode.customerId, {
       title: "Un code de réduction vous a été offert 🎁",
       message: `Profitez de ${valueLabel} de réduction avec le code ${discountCode.code} lors de votre prochaine commande.`,
@@ -62,17 +131,38 @@ export async function adminCreateDiscountCode(input: {
     });
   }
 
-  return delay(discountCode);
+  return discountCode;
 }
 
 export async function adminGetDiscountCodes(): Promise<DiscountCode[]> {
-  return delay(read().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+  const { data, error } = await supabase
+    .from("discount_codes")
+    .select(discountSelect)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).map((row) =>
+    mapDiscountCode(row as unknown as DiscountCodeRow),
+  );
 }
 
 export async function adminDeleteDiscountCode(id: string): Promise<void> {
-  write(read().filter((c) => c.id !== id));
-  return delay(undefined);
+  const { error } = await supabase
+    .from("discount_codes")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    throw error;
+  }
 }
+
+// ---------------------------------------------------------------------------
+// VALIDATION
+// ---------------------------------------------------------------------------
 
 export interface DiscountValidationResult {
   valid: boolean;
@@ -81,41 +171,116 @@ export interface DiscountValidationResult {
   code?: DiscountCode;
 }
 
-/**
- * Valide un code au checkout et calcule le montant de réduction applicable
- * au sous-total donné. Ne marque pas encore le code comme utilisé —
- * `redeemDiscountCode` s'en charge une fois la commande créée.
- */
 export async function validateDiscountCode(
   rawCode: string,
   customerId: string,
-  subtotal: number
+  subtotal: number,
 ): Promise<DiscountValidationResult> {
-  const code = read().find((c) => c.code === rawCode.trim().toUpperCase());
+  const normalizedCode = rawCode.trim().toUpperCase();
 
-  if (!code) return delay({ valid: false, reason: "Code de réduction introuvable." });
+  if (!normalizedCode) {
+    return {
+      valid: false,
+      reason: "Veuillez saisir un code de réduction.",
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("discount_codes")
+    .select(discountSelect)
+    .eq("code", normalizedCode)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    return {
+      valid: false,
+      reason: "Code de réduction introuvable.",
+    };
+  }
+
+  const code = mapDiscountCode(
+    data as unknown as DiscountCodeRow,
+  );
+
   if (code.usedCount >= code.maxUses) {
-    return delay({ valid: false, reason: "Ce code a atteint son nombre maximum d'utilisations." });
+    return {
+      valid: false,
+      reason:
+        "Ce code a atteint son nombre maximum d'utilisations.",
+    };
   }
+
   if (code.customerId && code.customerId !== customerId) {
-    return delay({ valid: false, reason: "Ce code ne correspond pas à votre compte." });
+    return {
+      valid: false,
+      reason: "Ce code ne correspond pas à votre compte.",
+    };
   }
-  if (code.expiresAt && new Date(code.expiresAt).getTime() < Date.now()) {
-    return delay({ valid: false, reason: "Ce code a expiré." });
+
+  if (
+    code.expiresAt &&
+    new Date(code.expiresAt).getTime() < Date.now()
+  ) {
+    return {
+      valid: false,
+      reason: "Ce code a expiré.",
+    };
   }
+
+  const safeSubtotal = Math.max(0, subtotal);
 
   const discountAmount =
-    code.type === "percentage" ? Math.round(subtotal * (code.value / 100)) : Math.min(code.value, subtotal);
+    code.type === "percentage"
+      ? Math.round(safeSubtotal * (code.value / 100))
+      : Math.min(code.value, safeSubtotal);
 
-  return delay({ valid: true, discountAmount, code });
+  return {
+    valid: true,
+    discountAmount,
+    code,
+  };
 }
 
-export async function redeemDiscountCode(codeId: string): Promise<void> {
-  const codes = read();
-  const code = codes.find((c) => c.id === codeId);
-  if (code) {
-    code.usedCount += 1;
-    write(codes);
+// ---------------------------------------------------------------------------
+// UTILISATION DU CODE
+// ---------------------------------------------------------------------------
+
+export async function redeemDiscountCode(
+  codeId: string,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("discount_codes")
+    .select("id, used_count, max_uses")
+    .eq("id", codeId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
   }
-  return delay(undefined, 50);
+
+  if (!data) {
+    throw new Error("Code de réduction introuvable.");
+  }
+
+  if (data.used_count >= data.max_uses) {
+    throw new Error(
+      "Ce code a atteint son nombre maximum d'utilisations.",
+    );
+  }
+
+  const { error: updateError } = await supabase
+    .from("discount_codes")
+    .update({
+      used_count: data.used_count + 1,
+    })
+    .eq("id", codeId)
+    .eq("used_count", data.used_count);
+
+  if (updateError) {
+    throw updateError;
+  }
 }
