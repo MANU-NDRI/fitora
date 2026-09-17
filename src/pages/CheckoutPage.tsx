@@ -114,7 +114,7 @@ export function CheckoutPage() {
     return (
       <div className="container-fitora flex flex-col items-center gap-4 py-24 text-center">
         <p className="text-fitora-gray">Votre panier est vide.</p>
-        <Button onClick={() => navigate("/boutique")}>DÃ©couvrir la boutique</Button>
+        <Button onClick={() => navigate("/boutique")}>Découvrir la boutique</Button>
       </div>
     );
   }
@@ -127,7 +127,7 @@ export function CheckoutPage() {
 
   function handleShareLocation() {
     if (!navigator.geolocation) {
-      setLocationError("La gÃ©olocalisation n'est pas disponible sur cet appareil.");
+      setLocationError("La géolocalisation n'est pas disponible sur cet appareil.");
       return;
     }
     setLocating(true);
@@ -138,7 +138,7 @@ export function CheckoutPage() {
         setLocating(false);
       },
       () => {
-        setLocationError("Position non partagÃ©e. Vous pouvez continuer sans.");
+        setLocationError("Position non partagée. Vous pouvez continuer sans.");
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 8000 }
@@ -216,31 +216,31 @@ export function CheckoutPage() {
       <div className="container-fitora flex justify-center py-14">
         <div className="w-full max-w-lg rounded-2xl bg-fitora-charcoal p-8 text-center">
           <CheckCircle2 size={40} className="mx-auto mb-4 text-fitora-green" />
-          <h1 className="font-display text-xl font-bold">Commande crÃ©Ã©e avec succÃ¨s</h1>
-          <p className="mt-1 text-sm text-fitora-gray">NumÃ©ro de commande</p>
+          <h1 className="font-display text-xl font-bold">Commande créée avec succès</h1>
+          <p className="mt-1 text-sm text-fitora-gray">Numéro de commande</p>
           <p className="font-display text-lg font-bold text-fitora-green">{confirmedOrder.number}</p>
 
           <div className="mt-6 rounded-xl bg-fitora-black/40 p-5 text-left">
-            <p className="text-sm text-fitora-gray">Montant Ã  payer</p>
+            <p className="text-sm text-fitora-gray">Montant à payer</p>
             <p className="font-display text-2xl font-bold">{formatFCFA(confirmedOrder.total)}</p>
             <p className="mt-3 text-sm text-fitora-gray">Moyen de paiement</p>
             <p className="font-semibold">{PAYMENT_METHOD_LABELS[confirmedOrder.paymentMethod]}</p>
             {paymentNumber && (
               <>
-                <p className="mt-3 text-sm text-fitora-gray">NumÃ©ro Ã  crÃ©diter</p>
+                <p className="mt-3 text-sm text-fitora-gray">Numéro à créditer</p>
                 <p className="font-semibold">{paymentNumber}</p>
               </>
             )}
             {confirmedOrder.receptionMode === "livraison" && confirmedOrder.estimatedDeliveryDays && (
               <>
-                <p className="mt-3 text-sm text-fitora-gray">DÃ©lai de livraison estimÃ©</p>
+                <p className="mt-3 text-sm text-fitora-gray">Délai de livraison estimé</p>
                 <p className="font-semibold">{confirmedOrder.estimatedDeliveryDays} jour(s)</p>
               </>
             )}
           </div>
 
           <p className="mt-5 text-sm text-fitora-gray">
-            Envoyez votre preuve de paiement sur WhatsApp pour que votre commande soit validÃ©e par FITORA.
+            Envoyez votre preuve de paiement sur WhatsApp pour que votre commande soit validée par FITORA.
           </p>
 
           <a
@@ -279,7 +279,7 @@ export function CheckoutPage() {
         <form onSubmit={handleSubmit} className="space-y-6 lg:col-span-2">
           {addresses.length > 0 && (
             <div className="rounded-2xl bg-fitora-charcoal p-5">
-              <p className="mb-3 text-sm font-semibold">Utiliser une adresse enregistrÃ©e</p>
+              <p className="mb-3 text-sm font-semibold">Utiliser une adresse enregistrée</p>
               <div className="flex flex-wrap gap-2">
                 {addresses.map((a) => (
                   <button
@@ -307,7 +307,7 @@ export function CheckoutPage() {
           )}
 
           <div className="rounded-2xl bg-fitora-charcoal p-5">
-            <h2 className="mb-4 font-display text-sm font-semibold">CoordonnÃ©es</h2>
+            <h2 className="mb-4 font-display text-sm font-semibold">Coordonnées</h2>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Nom complet">
                 <input
@@ -317,7 +317,7 @@ export function CheckoutPage() {
                   required
                 />
               </Field>
-              <Field label="TÃ©lÃ©phone">
+              <Field label="Téléphone">
                 <input
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -338,7 +338,7 @@ export function CheckoutPage() {
           </div>
 
           <div className="rounded-2xl bg-fitora-charcoal p-5">
-            <h2 className="mb-4 font-display text-sm font-semibold">Mode de rÃ©ception</h2>
+            <h2 className="mb-4 font-display text-sm font-semibold">Mode de réception</h2>
             <div className="flex gap-3">
               {(["livraison", "retrait"] as ReceptionMode[]).map((mode) => (
                 <button
@@ -369,7 +369,7 @@ export function CheckoutPage() {
                     <input value={form.quartier} onChange={(e) => setForm({ ...form, quartier: e.target.value })} className="input" required />
                   </Field>
                   <div className="sm:col-span-3">
-                    <Field label="Adresse dÃ©taillÃ©e">
+                    <Field label="Adresse détaillée">
                       <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="input" required />
                     </Field>
                   </div>
@@ -389,19 +389,19 @@ export function CheckoutPage() {
                   >
                     {locating ? <Loader2 size={14} className="animate-spin" /> : <MapPin size={14} />}
                     {coords
-                      ? "Position GPS partagÃ©e avec FITORA"
+                      ? "Position GPS partagée avec FITORA"
                       : locating
                       ? "Localisation en cours..."
                       : "Partager ma position GPS (facultatif)"}
                   </button>
                   {locationError && <p className="mt-1.5 text-xs text-fitora-gray-dim">{locationError}</p>}
                   <p className="mt-1.5 text-xs text-fitora-gray-dim">
-                    Aide le livreur Ã  vous trouver plus facilement. Totalement facultatif.
+                    Aide le livreur à vous trouver plus facilement. Totalement facultatif.
                   </p>
                 </div>
 
                 <div className="mt-5">
-                  <p className="mb-2 text-sm font-semibold">Mode d'expÃ©dition</p>
+                  <p className="mb-2 text-sm font-semibold">Mode d'expédition</p>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {shippingOptions.map((option) => (
                       <button
@@ -428,7 +428,7 @@ export function CheckoutPage() {
                         <span>
                           <span className="block text-sm font-semibold">{option.label}</span>
                           <span className="block text-xs text-fitora-gray">
-                            Livraison estimÃ©e sous {option.days} jour{option.days > 1 ? "s" : ""}
+                            Livraison estimée sous {option.days} jour{option.days > 1 ? "s" : ""}
                           </span>
                           <span className="mt-1 block text-sm font-bold text-fitora-green">
                             {formatFCFA(option.fee)}
@@ -476,12 +476,12 @@ export function CheckoutPage() {
           </div>
 
           <Button type="submit" size="lg" className="w-full lg:hidden" disabled={submitting}>
-            {submitting ? "CrÃ©ation de la commande..." : "Confirmer la commande"}
+            {submitting ? "Création de la commande..." : "Confirmer la commande"}
           </Button>
         </form>
 
         <div className="h-fit rounded-2xl bg-fitora-charcoal p-6">
-          <h2 className="mb-4 font-display text-lg font-bold">RÃ©capitulatif</h2>
+          <h2 className="mb-4 font-display text-lg font-bold">Récapitulatif</h2>
           <ul className="mb-4 max-h-64 space-y-3 overflow-y-auto">
             {lines.map((l) => (
               <li key={l.id} className="flex items-center gap-3">
@@ -492,7 +492,7 @@ export function CheckoutPage() {
 />
                 <div className="flex-1 text-sm">
                   <p className="line-clamp-1">{l.name}</p>
-                  <p className="text-xs text-fitora-gray">QtÃ© {l.quantity}</p>
+                  <p className="text-xs text-fitora-gray">Qté {l.quantity}</p>
                 </div>
                 <p className="text-sm font-semibold">{formatFCFA(l.price * l.quantity)}</p>
               </li>
@@ -501,7 +501,7 @@ export function CheckoutPage() {
 
           <div className="mb-4">
             <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-fitora-gray">
-              <Tag size={14} /> Code de rÃ©duction
+              <Tag size={14} /> Code de réduction
             </label>
             <div className="flex gap-2">
               <input
@@ -520,7 +520,7 @@ export function CheckoutPage() {
             {promoResult && (
               <p className={cn("mt-1.5 text-xs", promoResult.valid ? "text-fitora-green" : "text-red-400")}>
                 {promoResult.valid
-                  ? `Code appliquÃ© : -${formatFCFA(promoResult.discountAmount ?? 0)}`
+                  ? `Code appliqué : -${formatFCFA(promoResult.discountAmount ?? 0)}`
                   : promoResult.reason}
               </p>
             )}
@@ -532,14 +532,14 @@ export function CheckoutPage() {
             </div>
             <div className="flex justify-between text-fitora-gray">
               <span>
-                Frais d'expÃ©dition
+                Frais d'expédition
                 {form.receptionMode === "livraison" && selectedShipping && ` (${selectedShipping.label})`}
               </span>
               <span className="text-fitora-white">{formatFCFA(deliveryFee)}</span>
             </div>
             {discountAmount > 0 && (
               <div className="flex justify-between text-fitora-green">
-                <span>RÃ©duction</span><span>-{formatFCFA(discountAmount)}</span>
+                <span>Réduction</span><span>-{formatFCFA(discountAmount)}</span>
               </div>
             )}
             <div className="flex justify-between font-display text-base font-bold">
@@ -547,7 +547,7 @@ export function CheckoutPage() {
             </div>
           </div>
           <Button size="lg" className="mt-6 hidden w-full lg:flex" onClick={() => submitOrder()} disabled={submitting}>
-            {submitting ? "CrÃ©ation de la commande..." : "Confirmer la commande"}
+            {submitting ? "Création de la commande..." : "Confirmer la commande"}
           </Button>
         </div>
       </div>
