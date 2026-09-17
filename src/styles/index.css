@@ -1,0 +1,113 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&family=Montserrat:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
+
+@theme {
+  /* FITORA brand palette */
+  --color-fitora-black: #0a0a0a;
+  --color-fitora-charcoal: #171717;
+  --color-fitora-charcoal-light: #212121;
+  --color-fitora-green: #39ff14;
+  --color-fitora-green-dim: #2ecc0f;
+  --color-fitora-white: #ffffff;
+  --color-fitora-gray: #9a9a9a;
+  --color-fitora-gray-dim: #6b6b6b;
+  --color-fitora-border: #2a2a2a;
+
+  --font-display: "Poppins", "Montserrat", sans-serif;
+  --font-body: "Montserrat", "Poppins", sans-serif;
+
+  --shadow-glow: 0 0 24px rgba(57, 255, 20, 0.25);
+  --shadow-glow-lg: 0 0 48px rgba(57, 255, 20, 0.2);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-fitora-border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-fitora-black);
+    color: var(--color-fitora-white);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+  }
+
+  ::selection {
+    background-color: var(--color-fitora-green);
+    color: var(--color-fitora-black);
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-fitora-black);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-fitora-charcoal-light);
+    border-radius: 999px;
+  }
+
+  /* Visible keyboard focus */
+  :focus-visible {
+    outline: 2px solid var(--color-fitora-green);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .input {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-fitora-border);
+    background-color: var(--color-fitora-charcoal);
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    color: var(--color-fitora-white);
+    transition: border-color 0.15s ease;
+  }
+  .input::placeholder {
+    color: var(--color-fitora-gray-dim);
+  }
+  .input:focus {
+    outline: none;
+    border-color: var(--color-fitora-green);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .container-fitora {
+    max-width: 1400px;
+    margin-inline: auto;
+    padding-inline: 1.25rem;
+  }
+
+  @media (min-width: 768px) {
+    .container-fitora {
+      padding-inline: 2rem;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
