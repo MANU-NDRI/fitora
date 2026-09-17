@@ -83,6 +83,3 @@ export async function adminUpdateVariantStock(productId: string, variantId: stri
   if (error) throw error;
   return readProduct(productId);
 }
-
-// Kept for API compatibility; catalog counts are always read from PostgreSQL.
-export function recomputeCategoryCounts(): void { /* no local catalog state */ }

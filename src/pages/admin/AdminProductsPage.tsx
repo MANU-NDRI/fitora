@@ -8,7 +8,6 @@ import {
   adminDeleteProduct,
   adminTogglePublish,
   adminToggleOutOfStock,
-  recomputeCategoryCounts,
 } from "@/services/adminProductService";
 import { adminGetCategories } from "@/services/adminCategoryService";
 import { ProductForm, type ProductFormValues } from "@/features/admin/ProductForm";
@@ -54,7 +53,6 @@ export function AdminProductsPage() {
         badges: [],
         published: values.published,
       });
-      recomputeCategoryCounts();
       pushToast("Produit créé", "success");
       setView({ mode: "list" });
       refresh();
@@ -80,7 +78,6 @@ export function AdminProductsPage() {
         variants: values.variants,
         published: values.published,
       });
-      recomputeCategoryCounts();
       pushToast("Produit modifié", "success");
       setView({ mode: "list" });
       refresh();
@@ -91,14 +88,12 @@ export function AdminProductsPage() {
 
   async function handleDelete(id: string) {
     await adminDeleteProduct(id);
-    recomputeCategoryCounts();
     pushToast("Produit supprimé", "info");
     refresh();
   }
 
   async function handleTogglePublish(id: string) {
     await adminTogglePublish(id);
-    recomputeCategoryCounts();
     refresh();
   }
 
