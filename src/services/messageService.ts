@@ -1,83 +1,187 @@
+import { supabase } from "@/lib/supabase";
 import type { ContactMessage } from "@/types";
 import { sendCustomerNotification } from "@/services/notificationService";
 
-// Simule la table Supabase `contact_messages`.
-const STORAGE_KEY = "fitora-contact-messages";
-
-function delay<T>(value: T, ms = 300): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
+interface ContactMessageRow {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: ContactMessage["status"];
+  customer_id: string | null;
+  reply: string | null;
+  replied_at: string | null;
+  created_at: string;
 }
 
-function read(): ContactMessage[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as ContactMessage[]) : [];
-  } catch {
-    return [];
+function mapMessage(row: ContactMessageRow): ContactMessage {
+  return {
+    id: row.id,
+    name: row.name,
+    phone: row.phone,
+    email: row.email,
+    subject: row.subject,
+    message: row.message,
+    status: row.status,
+    customerId: row.customer_id ?? undefined,
+    reply: row.reply ?? undefined,
+    repliedAt: row.replied_at ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+async function getCurrentUserId(): Promise<string | null> {
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error || !data.user) {
+    return null;
   }
-}
 
-function write(messages: ContactMessage[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+  return data.user.id;
 }
 
 export async function sendContactMessage(
-  input: Pick<ContactMessage, "name" | "phone" | "email" | "subject" | "message"> & {
+  input: Pick<
+    ContactMessage,
+    "name" | "phone" | "email" | "subject" | "message"
+  > & {
     customerId?: string;
-  }
+  },
 ): Promise<ContactMessage> {
-  const message: ContactMessage = {
-    id: `msg-${Date.now()}`,
-    ...input,
-    status: "unread",
-    createdAt: new Date().toISOString(),
-  };
-  write([message, ...read()]);
-  return delay(message);
+  let customerId = input.customerId ?? null;
+
+  if (!customerId) {
+    customerId = await getCurrentUserId();
+  }
+
+  const { data, error } = await supabase
+    .from("contact_messages")
+    .insert({
+      name: input.name.trim(),
+      phone: input.phone.trim(),
+      email: input.email.trim(),
+      subject: input.subject.trim(),
+      message: input.message.trim(),
+      status: "unread",
+      customer_id: customerId,
+    })
+    .select(
+      "id, name, phone, email, subject, message, status, customer_id, reply, replied_at, created_at",
+    )
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapMessage(data as ContactMessageRow);
 }
 
 export async function adminGetMessages(): Promise<ContactMessage[]> {
-  return delay(read());
+  const { data, error } = await supabase
+    .from("contact_messages")
+    .select(
+      "id, name, phone, email, subject, message, status, customer_id, reply, replied_at, created_at",
+    )
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).map((row) => mapMessage(row as ContactMessageRow));
 }
 
-export async function getMessagesForCustomer(customerId: string): Promise<ContactMessage[]> {
-  return delay(read().filter((m) => m.customerId === customerId));
+export async function getMessagesForCustomer(
+  customerId: string,
+): Promise<ContactMessage[]> {
+  const currentUserId = await getCurrentUserId();
+
+  if (!currentUserId) {
+    throw new Error("Vous devez être connecté.");
+  }
+
+  if (currentUserId !== customerId) {
+    throw new Error("Utilisateur non autorisé.");
+  }
+
+  const { data, error } = await supabase
+    .from("contact_messages")
+    .select(
+      "id, name, phone, email, subject, message, status, customer_id, reply, replied_at, created_at",
+    )
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).map((row) => mapMessage(row as ContactMessageRow));
 }
 
 export async function adminUpdateMessageStatus(
   id: string,
-  status: ContactMessage["status"]
+  status: ContactMessage["status"],
 ): Promise<ContactMessage | null> {
-  const messages = read();
-  const message = messages.find((m) => m.id === id);
-  if (!message) return delay(null);
-  message.status = status;
-  write(messages);
-  return delay(message);
+  const { data, error } = await supabase
+    .from("contact_messages")
+    .update({ status })
+    .eq("id", id)
+    .select(
+      "id, name, phone, email, subject, message, status, customer_id, reply, replied_at, created_at",
+    )
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data ? mapMessage(data as ContactMessageRow) : null;
 }
 
-/**
- * Réponse de l'administrateur visible directement sur la plateforme
- * (en plus, ou à la place, d'une réponse par WhatsApp). Si le client était
- * connecté au moment de l'envoi du message, il reçoit une notification.
- */
-export async function adminReplyToMessage(id: string, reply: string): Promise<ContactMessage | null> {
-  const messages = read();
-  const message = messages.find((m) => m.id === id);
-  if (!message) return delay(null);
+export async function adminReplyToMessage(
+  id: string,
+  reply: string,
+): Promise<ContactMessage | null> {
+  const cleanReply = reply.trim();
 
-  message.reply = reply;
-  message.repliedAt = new Date().toISOString();
-  message.status = "replied";
-  write(messages);
+  if (!cleanReply) {
+    throw new Error("La réponse ne peut pas être vide.");
+  }
+
+  const { data, error } = await supabase
+    .from("contact_messages")
+    .update({
+      reply: cleanReply,
+      replied_at: new Date().toISOString(),
+      status: "replied",
+    })
+    .eq("id", id)
+    .select(
+      "id, name, phone, email, subject, message, status, customer_id, reply, replied_at, created_at",
+    )
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const message = mapMessage(data as ContactMessageRow);
 
   if (message.customerId) {
     await sendCustomerNotification(message.customerId, {
       title: "Réponse de FITORA à votre message",
-      message: reply,
+      message: cleanReply,
       link: "/compte/messages",
     });
   }
 
-  return delay(message);
+  return message;
 }
