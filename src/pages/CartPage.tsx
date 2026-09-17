@@ -63,9 +63,9 @@ export function CartPage() {
       <div className="container-fitora flex flex-col items-center gap-4 py-24 text-center">
         <ShoppingBag size={44} className="text-fitora-gray-dim" />
         <h1 className="font-display text-2xl font-bold">Votre panier est vide</h1>
-        <p className="text-fitora-gray">Parcourez la boutique pour trouver votre prochain ÃƒÂ©quipement.</p>
+        <p className="text-fitora-gray">Parcourez la boutique pour trouver votre prochain équipement.</p>
         <Link to="/boutique">
-          <Button>DÃƒÂ©couvrir la boutique</Button>
+          <Button>Découvrir la boutique</Button>
         </Link>
       </div>
     );
@@ -92,7 +92,7 @@ export function CartPage() {
                       <p className="mt-1 text-xs text-fitora-gray">
                         {[line.size, line.shoeSize && `Pointure ${line.shoeSize}`, line.color]
                           .filter(Boolean)
-                          .join(" Ã‚Â· ")}
+                          .join(" · ")}
                       </p>
                     </div>
                     <button
@@ -108,7 +108,7 @@ export function CartPage() {
                       <button
                         onClick={() => updateQuantity(line.id, line.quantity - 1)}
                         disabled={line.quantity <= 1}
-                        aria-label="Diminuer la quantitÃƒÂ©"
+                        aria-label="Diminuer la quantité"
                       >
                         <Minus size={14} />
                       </button>
@@ -116,7 +116,7 @@ export function CartPage() {
                       <button
                         onClick={() => updateQuantity(line.id, line.quantity + 1)}
                         disabled={line.quantity >= line.maxStock}
-                        aria-label="Augmenter la quantitÃƒÂ©"
+                        aria-label="Augmenter la quantité"
                       >
                         <Plus size={14} />
                       </button>
@@ -132,14 +132,14 @@ export function CartPage() {
         </div>
 
         <div className="h-fit rounded-2xl bg-fitora-charcoal p-6">
-          <h2 className="mb-4 font-display text-lg font-bold">RÃƒÂ©capitulatif</h2>
+          <h2 className="mb-4 font-display text-lg font-bold">Récapitulatif</h2>
           <div className="space-y-2.5 text-sm">
             <div className="flex justify-between text-fitora-gray">
               <span>Sous-total</span>
               <span className="text-fitora-white">{formatFCFA(subtotal)}</span>
             </div>
             <div className="flex justify-between text-fitora-gray">
-              <span>Livraison standard (estimÃƒÂ©e)</span>
+              <span>Livraison standard (estimée)</span>
               <span className="text-fitora-white">{formatFCFA(deliveryFee)}</span>
             </div>
             <div className="my-2 border-t border-fitora-border" />
@@ -152,8 +152,8 @@ export function CartPage() {
             Passer la commande
           </Button>
           <p className="mt-3 text-center text-xs text-fitora-gray-dim">
-            Le choix entre livraison standard et express se fait ÃƒÂ  l'ÃƒÂ©tape suivante. La crÃƒÂ©ation d'un
-            compte est nÃƒÂ©cessaire pour finaliser la commande.
+            Le choix entre livraison standard et express se fait à l'étape suivante. La création d'un
+            compte est nécessaire pour finaliser la commande.
           </p>
         </div>
       </div>
