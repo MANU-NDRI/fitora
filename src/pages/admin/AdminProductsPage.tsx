@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Eye, EyeOff, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, EyeOff, Search, AlertTriangle, PackageCheck } from "lucide-react";
 import type { Product } from "@/types";
 import {
   adminGetProducts,
@@ -7,6 +7,7 @@ import {
   adminUpdateProduct,
   adminDeleteProduct,
   adminTogglePublish,
+  adminToggleOutOfStock,
   recomputeCategoryCounts,
 } from "@/services/adminProductService";
 import { adminGetCategories } from "@/services/adminCategoryService";
@@ -36,9 +37,13 @@ export function AdminProductsPage() {
   }, []);
 
   async function handleCreate(values: ProductFormValues) {
+    const category = categories.find((c) => c.id === values.categoryId);
+    if (!category) {
+      pushToast("Catégorie introuvable — rechargez la page et réessayez.", "error");
+      return;
+    }
     setSubmitting(true);
     try {
-      const category = categories.find((c) => c.id === values.categoryId)!;
       await adminCreateProduct({
         name: values.name,
         categoryId: values.categoryId,
@@ -46,7 +51,7 @@ export function AdminProductsPage() {
         sport: values.sport,
         description: values.description,
         features: values.features.split(",").map((f) => f.trim()).filter(Boolean),
-        images: values.images.split(",").map((i) => i.trim()).filter(Boolean),
+        images: values.images,
         price: values.price,
         oldPrice: values.oldPrice,
         variants: values.variants,
@@ -57,15 +62,21 @@ export function AdminProductsPage() {
       pushToast("Produit créé", "success");
       setView({ mode: "list" });
       refresh();
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : "Création du produit impossible.", "error");
     } finally {
       setSubmitting(false);
     }
   }
 
   async function handleUpdate(id: string, values: ProductFormValues) {
+    const category = categories.find((c) => c.id === values.categoryId);
+    if (!category) {
+      pushToast("Catégorie introuvable — rechargez la page et réessayez.", "error");
+      return;
+    }
     setSubmitting(true);
     try {
-      const category = categories.find((c) => c.id === values.categoryId)!;
       await adminUpdateProduct(id, {
         name: values.name,
         categoryId: values.categoryId,
@@ -73,7 +84,7 @@ export function AdminProductsPage() {
         sport: values.sport,
         description: values.description,
         features: values.features.split(",").map((f) => f.trim()).filter(Boolean),
-        images: values.images.split(",").map((i) => i.trim()).filter(Boolean),
+        images: values.images,
         price: values.price,
         oldPrice: values.oldPrice,
         variants: values.variants,
@@ -83,22 +94,41 @@ export function AdminProductsPage() {
       pushToast("Produit modifié", "success");
       setView({ mode: "list" });
       refresh();
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : "Modification du produit impossible.", "error");
     } finally {
       setSubmitting(false);
     }
   }
 
   async function handleDelete(id: string) {
-    await adminDeleteProduct(id);
-    recomputeCategoryCounts();
-    pushToast("Produit supprimé", "info");
-    refresh();
+    try {
+      await adminDeleteProduct(id);
+      recomputeCategoryCounts();
+      pushToast("Produit supprimé", "info");
+      refresh();
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : "Suppression impossible.", "error");
+    }
   }
 
   async function handleTogglePublish(id: string) {
-    await adminTogglePublish(id);
-    recomputeCategoryCounts();
-    refresh();
+    try {
+      await adminTogglePublish(id);
+      recomputeCategoryCounts();
+      refresh();
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : "Action impossible.", "error");
+    }
+  }
+
+  async function handleToggleOutOfStock(id: string) {
+    try {
+      await adminToggleOutOfStock(id);
+      refresh();
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : "Action impossible.", "error");
+    }
   }
 
   const filtered = products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
@@ -136,7 +166,15 @@ export function AdminProductsPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-xl font-bold">Produits ({products.length})</h1>
-        <Button onClick={() => setView({ mode: "create" })}>
+        <Button
+          onClick={() => {
+            if (categories.length === 0) {
+              pushToast("Créez d'abord une catégorie avant d'ajouter un produit.", "error");
+              return;
+            }
+            setView({ mode: "create" });
+          }}
+        >
           <Plus size={16} /> Nouveau produit
         </Button>
       </div>
@@ -189,9 +227,22 @@ export function AdminProductsPage() {
                     >
                       {p.published ? "Publié" : "Non publié"}
                     </span>
+                    {p.outOfStockOverride && (
+                      <span className="ml-1.5 rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-400">
+                        Rupture (manuel)
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-3">
+                      <button
+                        onClick={() => handleToggleOutOfStock(p.id)}
+                        aria-label={p.outOfStockOverride ? "Marquer disponible" : "Marquer en rupture"}
+                        title={p.outOfStockOverride ? "Marquer disponible" : "Marquer en rupture de stock"}
+                        className={p.outOfStockOverride ? "text-red-400 hover:text-red-300" : "text-fitora-gray hover:text-fitora-white"}
+                      >
+                        {p.outOfStockOverride ? <AlertTriangle size={16} /> : <PackageCheck size={16} />}
+                      </button>
                       <button onClick={() => handleTogglePublish(p.id)} aria-label="Publier/Dépublier" className="text-fitora-gray hover:text-fitora-white">
                         {p.published ? <Eye size={16} /> : <EyeOff size={16} />}
                       </button>
