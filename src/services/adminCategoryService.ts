@@ -1,12 +1,12 @@
 import type { Category } from '@/types';
 import { requireSupabase } from '@/lib/supabase';
-import { mapCategory } from './catalogMapper';
+import { mapCategory, type CategoryRow } from './catalogMapper';
 import { slugify } from '@/lib/format';
 
 export type CategoryInput = Omit<Category, 'id' | 'slug' | 'productCount'>;
 
-const withCount = async (row: Record<string, unknown>): Promise<Category> => {
-  const category = mapCategory(row as never);
+const withCount = async (row: CategoryRow): Promise<Category> => {
+  const category = mapCategory(row);
   const { count, error } = await requireSupabase().from('products').select('id', { count: 'exact', head: true }).eq('category_id', category.id).eq('published', true);
   if (error) throw error;
   return { ...category, productCount: count ?? 0 };
@@ -15,21 +15,25 @@ const withCount = async (row: Record<string, unknown>): Promise<Category> => {
 export async function adminGetCategories(): Promise<Category[]> {
   const { data, error } = await requireSupabase().from('categories').select('*').order('order_index');
   if (error) throw error;
-  return Promise.all((data ?? []).map((row) => withCount(row)));
+  return Promise.all((data ?? []).map((row) => withCount(row as CategoryRow)));
 }
 
 export async function adminCreateCategory(input: CategoryInput): Promise<Category> {
   const { data, error } = await requireSupabase().from('categories').insert({ slug: slugify(input.name), name: input.name, image: input.image, sport: input.sport, order_index: input.order, published: input.published }).select('*').single();
   if (error) throw error;
-  return withCount(data);
+  return withCount(data as CategoryRow);
 }
 
 export async function adminUpdateCategory(id: string, input: Partial<CategoryInput>): Promise<Category | null> {
-  const payload = { ...input, ...(input.name ? { slug: slugify(input.name) } : {}), ...(input.order !== undefined ? { order_index: input.order } : {}) } as Record<string, unknown>;
-  delete payload.order;
+  const payload: Record<string, unknown> = {};
+  if (input.name !== undefined) { payload.name = input.name; payload.slug = slugify(input.name); }
+  if (input.image !== undefined) payload.image = input.image;
+  if (input.sport !== undefined) payload.sport = input.sport;
+  if (input.order !== undefined) payload.order_index = input.order;
+  if (input.published !== undefined) payload.published = input.published;
   const { data, error } = await requireSupabase().from('categories').update(payload).eq('id', id).select('*').maybeSingle();
   if (error) throw error;
-  return data ? withCount(data) : null;
+  return data ? withCount(data as CategoryRow) : null;
 }
 
 export async function adminDeleteCategory(id: string): Promise<void> {
@@ -43,5 +47,5 @@ export async function adminTogglePublishCategory(id: string): Promise<Category |
   if (readError) throw readError;
   const { data, error } = await supabase.from('categories').update({ published: !current.published }).eq('id', id).select('*').maybeSingle();
   if (error) throw error;
-  return data ? withCount(data) : null;
+  return data ? withCount(data as CategoryRow) : null;
 }

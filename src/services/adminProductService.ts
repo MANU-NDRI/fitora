@@ -23,12 +23,14 @@ function productPayload(input: Partial<ProductInput>): Record<string, unknown> {
 async function syncChildren(productId: string, input: Partial<ProductInput>): Promise<void> {
   const supabase = requireSupabase();
   if (input.images) {
-    await supabase.from('product_images').delete().eq('product_id', productId);
+    const { error: deleteError } = await supabase.from('product_images').delete().eq('product_id', productId);
+    if (deleteError) throw deleteError;
     const { error } = await supabase.from('product_images').insert(input.images.map((url, position) => ({ product_id: productId, url, position })));
     if (error) throw error;
   }
   if (input.variants) {
-    await supabase.from('product_variants').delete().eq('product_id', productId);
+    const { error: deleteError } = await supabase.from('product_variants').delete().eq('product_id', productId);
+    if (deleteError) throw deleteError;
     const { error } = await supabase.from('product_variants').insert(input.variants.map((variant) => ({ product_id: productId, size: variant.size ?? null, color: variant.color ?? null, color_hex: variant.colorHex ?? null, shoe_size: variant.shoeSize ?? null, stock_available: variant.stockAvailable, sku: variant.sku })));
     if (error) throw error;
   }
@@ -81,4 +83,6 @@ export async function adminUpdateVariantStock(productId: string, variantId: stri
   if (error) throw error;
   return readProduct(productId);
 }
-export { recomputeCategoryCounts } from './adminDataStore';
+
+// Kept for API compatibility; catalog counts are always read from PostgreSQL.
+export function recomputeCategoryCounts(): void { /* no local catalog state */ }
