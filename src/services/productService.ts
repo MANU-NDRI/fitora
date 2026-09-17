@@ -2,6 +2,12 @@ import type { Product, ProductBadge, ProductFilters, SortOption } from '@/types'
 import { requireSupabase } from '@/lib/supabase';
 import { mapProduct } from './catalogMapper';
 
+type CatalogRow = Parameters<typeof mapProduct>[0];
+type CatalogQuery<T extends CatalogRow> = PromiseLike<{
+  data: T[] | null;
+  error: { message: string } | null;
+}>;
+
 export interface PaginatedProducts {
   items: Product[];
   total: number;
@@ -50,7 +56,7 @@ function sortProducts(products: Product[], sort: SortOption = 'recent'): Product
   });
 }
 
-async function fetchCatalog(query: ReturnType<ReturnType<typeof requireSupabase>['from']>) {
+async function fetchCatalog<T extends CatalogRow>(query: CatalogQuery<T>): Promise<Product[]> {
   const { data, error } = await query;
   if (error) throw error;
   return (data ?? []).map(mapProduct);
@@ -82,7 +88,7 @@ export async function getProductsByIds(ids: string[]): Promise<Product[]> {
 }
 
 export async function getRelatedProducts(product: Product, limit = 4): Promise<Product[]> {
-  const result = await getProducts({ categorySlug: undefined, page: 1, pageSize: 100 });
+  const result = await getProducts({}, 1, 100);
   return result.items.filter((candidate) => candidate.id !== product.id && (candidate.categoryId === product.categoryId || candidate.sport === product.sport)).slice(0, limit);
 }
 
