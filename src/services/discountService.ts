@@ -116,7 +116,9 @@ export async function adminCreateDiscountCode(input: {
     throw error;
   }
 
-  const discountCode = mapDiscountCode(data as unknown as DiscountCodeRow);
+  const discountCode = mapDiscountCode(
+    data as unknown as DiscountCodeRow,
+  );
 
   if (discountCode.customerId) {
     const valueLabel =
@@ -149,7 +151,9 @@ export async function adminGetDiscountCodes(): Promise<DiscountCode[]> {
   );
 }
 
-export async function adminDeleteDiscountCode(id: string): Promise<void> {
+export async function adminDeleteDiscountCode(
+  id: string,
+): Promise<void> {
   const { error } = await supabase
     .from("discount_codes")
     .delete()
@@ -252,35 +256,11 @@ export async function validateDiscountCode(
 export async function redeemDiscountCode(
   codeId: string,
 ): Promise<void> {
-  const { data, error } = await supabase
-    .from("discount_codes")
-    .select("id, used_count, max_uses")
-    .eq("id", codeId)
-    .maybeSingle();
+  const { error } = await supabase.rpc("redeem_discount_code", {
+    p_code_id: codeId,
+  });
 
   if (error) {
-    throw error;
-  }
-
-  if (!data) {
-    throw new Error("Code de réduction introuvable.");
-  }
-
-  if (data.used_count >= data.max_uses) {
-    throw new Error(
-      "Ce code a atteint son nombre maximum d'utilisations.",
-    );
-  }
-
-  const { error: updateError } = await supabase
-    .from("discount_codes")
-    .update({
-      used_count: data.used_count + 1,
-    })
-    .eq("id", codeId)
-    .eq("used_count", data.used_count);
-
-  if (updateError) {
-    throw updateError;
+    throw new Error(error.message);
   }
 }

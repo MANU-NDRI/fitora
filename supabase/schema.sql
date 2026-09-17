@@ -1,18 +1,18 @@
 -- =============================================================================
--- FITORA — Schéma Supabase / PostgreSQL
+-- FITORA â€” SchÃ©ma Supabase / PostgreSQL
 -- =============================================================================
--- À exécuter dans l'éditeur SQL de votre projet Supabase (Database > SQL Editor)
+-- Ã€ exÃ©cuter dans l'Ã©diteur SQL de votre projet Supabase (Database > SQL Editor)
 -- avant de renseigner VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY dans .env.
 --
--- Ordre d'exécution recommandé :
+-- Ordre d'exÃ©cution recommandÃ© :
 --   1. schema.sql   (ce fichier : tables, types, index, RLS, triggers)
---   2. seed.sql     (catégories + produits de démonstration)
+--   2. seed.sql     (catÃ©gories + produits de dÃ©monstration)
 -- =============================================================================
 
 create extension if not exists "pgcrypto";
 
 -- -----------------------------------------------------------------------------
--- Types énumérés
+-- Types Ã©numÃ©rÃ©s
 -- -----------------------------------------------------------------------------
 create type user_role as enum ('customer', 'admin');
 
@@ -45,7 +45,7 @@ create type inventory_movement_type as enum ('in', 'out', 'correction', 'reserva
 create type notification_scope as enum ('broadcast', 'customer');
 
 -- -----------------------------------------------------------------------------
--- profiles — étend auth.users (Supabase Auth)
+-- profiles â€” Ã©tend auth.users (Supabase Auth)
 -- -----------------------------------------------------------------------------
 create table profiles (
   id uuid primary key references auth.users (id) on delete cascade,
@@ -57,7 +57,7 @@ create table profiles (
   created_at timestamptz not null default now()
 );
 
--- Crée automatiquement un profil "customer" à l'inscription (Supabase Auth).
+-- CrÃ©e automatiquement un profil "customer" Ã  l'inscription (Supabase Auth).
 create function handle_new_user()
 returns trigger as $$
 begin
@@ -109,8 +109,8 @@ create table products (
   review_count int not null default 0,
   sales_count int not null default 0,
   published boolean not null default true,
-  -- Rupture de stock déclarée manuellement par l'administrateur, indépendante
-  -- des quantités réelles restantes sur les variantes.
+  -- Rupture de stock dÃ©clarÃ©e manuellement par l'administrateur, indÃ©pendante
+  -- des quantitÃ©s rÃ©elles restantes sur les variantes.
   out_of_stock_override boolean not null default false,
   created_at timestamptz not null default now()
 );
@@ -121,11 +121,11 @@ create index products_published_idx on products (published);
 create table product_images (
   id uuid primary key default gen_random_uuid(),
   product_id uuid not null references products (id) on delete cascade,
-  -- En mode démo (sans Supabase Storage), le frontend peut stocker ici une
-  -- image encodée en base64 directement téléversée par l'administrateur.
-  -- En production, préférez héberger les fichiers dans un bucket Supabase
-  -- Storage public et ne stocker ici que l'URL publique retournée : c'est
-  -- plus léger en base et bénéficie du CDN de Supabase.
+  -- En mode dÃ©mo (sans Supabase Storage), le frontend peut stocker ici une
+  -- image encodÃ©e en base64 directement tÃ©lÃ©versÃ©e par l'administrateur.
+  -- En production, prÃ©fÃ©rez hÃ©berger les fichiers dans un bucket Supabase
+  -- Storage public et ne stocker ici que l'URL publique retournÃ©e : c'est
+  -- plus lÃ©ger en base et bÃ©nÃ©ficie du CDN de Supabase.
   url text not null,
   position int not null default 0
 );
@@ -161,7 +161,7 @@ create table addresses (
   quartier text not null,
   address text not null,
   is_default boolean not null default false,
-  -- Position GPS partagée volontairement par le client (facultatif),
+  -- Position GPS partagÃ©e volontairement par le client (facultatif),
   -- visible par l'administrateur pour faciliter la livraison.
   latitude double precision,
   longitude double precision,
@@ -211,11 +211,11 @@ create table order_items (
 create index order_items_order_id_idx on order_items (order_id);
 
 -- ---------------------------------------------------------------------------
--- FAILLE ÉVITÉE : sans ce trigger, un client malveillant pourrait insérer un
--- order_item avec n'importe quel `unit_price` de son choix (le prix affiché
--- dans le navigateur n'est jamais fiable). Ce trigger ignore le prix envoyé
--- par le client et le remplace systématiquement par le prix réel et actuel
--- du produit en base — le prix payé provient donc toujours du catalogue,
+-- FAILLE Ã‰VITÃ‰E : sans ce trigger, un client malveillant pourrait insÃ©rer un
+-- order_item avec n'importe quel `unit_price` de son choix (le prix affichÃ©
+-- dans le navigateur n'est jamais fiable). Ce trigger ignore le prix envoyÃ©
+-- par le client et le remplace systÃ©matiquement par le prix rÃ©el et actuel
+-- du produit en base â€” le prix payÃ© provient donc toujours du catalogue,
 -- jamais du navigateur.
 -- ---------------------------------------------------------------------------
 create function enforce_authoritative_item_price()
@@ -230,9 +230,9 @@ create trigger order_items_enforce_price
   before insert on order_items
   for each row execute procedure enforce_authoritative_item_price();
 
--- Recalcule le sous-total de la commande à partir des lignes réellement
--- enregistrées (avec leur prix authentique), plutôt que de faire confiance
--- au sous-total envoyé par le client à la création de la commande.
+-- Recalcule le sous-total de la commande Ã  partir des lignes rÃ©ellement
+-- enregistrÃ©es (avec leur prix authentique), plutÃ´t que de faire confiance
+-- au sous-total envoyÃ© par le client Ã  la crÃ©ation de la commande.
 create function recompute_order_subtotal()
 returns trigger as $$
 begin
@@ -248,7 +248,7 @@ create trigger order_items_recompute_subtotal
   after insert or update or delete on order_items
   for each row execute procedure recompute_order_subtotal();
 
--- Génère automatiquement un numéro de commande FIT-{année}-{séquence}.
+-- GÃ©nÃ¨re automatiquement un numÃ©ro de commande FIT-{annÃ©e}-{sÃ©quence}.
 create sequence order_number_seq;
 
 create function generate_order_number()
@@ -280,10 +280,10 @@ create trigger orders_touch_updated_at
   for each row execute procedure touch_order_updated_at();
 
 -- -----------------------------------------------------------------------------
--- Réservation de stock (section 30 du cahier des charges)
--- À la création d'un order_item, on réserve la quantité sur la variante et on
--- historise le mouvement. Un job planifié (pg_cron, ci-dessous) libère les
--- réservations non payées après 24h.
+-- RÃ©servation de stock (section 30 du cahier des charges)
+-- Ã€ la crÃ©ation d'un order_item, on rÃ©serve la quantitÃ© sur la variante et on
+-- historise le mouvement. Un job planifiÃ© (pg_cron, ci-dessous) libÃ¨re les
+-- rÃ©servations non payÃ©es aprÃ¨s 24h.
 -- -----------------------------------------------------------------------------
 create function reserve_stock()
 returns trigger as $$
@@ -299,7 +299,7 @@ begin
     end if;
 
     insert into inventory_movements (variant_id, type, quantity, note)
-    values (new.variant_id, 'reservation', new.quantity, 'Réservation à la commande');
+    values (new.variant_id, 'reservation', new.quantity, 'RÃ©servation Ã  la commande');
   end if;
   return new;
 end;
@@ -309,8 +309,8 @@ create trigger order_items_reserve_stock
   after insert on order_items
   for each row execute procedure reserve_stock();
 
--- Quand une commande passe à "paid", le stock réservé est déduit définitivement.
--- Quand une commande passe à "cancelled", le stock réservé est libéré.
+-- Quand une commande passe Ã  "paid", le stock rÃ©servÃ© est dÃ©duit dÃ©finitivement.
+-- Quand une commande passe Ã  "cancelled", le stock rÃ©servÃ© est libÃ©rÃ©.
 create function apply_order_status_stock_effects()
 returns trigger as $$
 begin
@@ -322,7 +322,7 @@ begin
     where oi.order_id = new.id and oi.variant_id = pv.id;
 
     insert into inventory_movements (variant_id, type, quantity, note)
-    select oi.variant_id, 'out', oi.quantity, 'Déduction après paiement confirmé (' || new.number || ')'
+    select oi.variant_id, 'out', oi.quantity, 'DÃ©duction aprÃ¨s paiement confirmÃ© (' || new.number || ')'
     from order_items oi
     where oi.order_id = new.id and oi.variant_id is not null;
   end if;
@@ -334,7 +334,7 @@ begin
     where oi.order_id = new.id and oi.variant_id = pv.id;
 
     insert into inventory_movements (variant_id, type, quantity, note)
-    select oi.variant_id, 'release', oi.quantity, 'Libération suite annulation (' || new.number || ')'
+    select oi.variant_id, 'release', oi.quantity, 'LibÃ©ration suite annulation (' || new.number || ')'
     from order_items oi
     where oi.order_id = new.id and oi.variant_id is not null;
   end if;
@@ -347,9 +347,9 @@ create trigger orders_stock_effects
   after update on orders
   for each row execute procedure apply_order_status_stock_effects();
 
--- Optionnel : libération automatique des réservations après 24h si le
--- paiement n'a pas été confirmé (nécessite l'extension pg_cron sur Supabase :
--- Database > Extensions > pg_cron, puis exécuter la ligne ci-dessous) :
+-- Optionnel : libÃ©ration automatique des rÃ©servations aprÃ¨s 24h si le
+-- paiement n'a pas Ã©tÃ© confirmÃ© (nÃ©cessite l'extension pg_cron sur Supabase :
+-- Database > Extensions > pg_cron, puis exÃ©cuter la ligne ci-dessous) :
 --
 -- select cron.schedule(
 --   'fitora-release-expired-reservations',
@@ -361,14 +361,14 @@ create trigger orders_stock_effects
 -- );
 
 -- -----------------------------------------------------------------------------
--- product_reviews (avis clients — uniquement après livraison)
+-- product_reviews (avis clients â€” uniquement aprÃ¨s livraison)
 -- -----------------------------------------------------------------------------
 create table product_reviews (
   id uuid primary key default gen_random_uuid(),
   product_id uuid not null references products (id) on delete cascade,
   customer_id uuid references profiles (id) on delete set null,
-  -- Renseigné lorsque l'avis provient d'un achat vérifié : garantit qu'un
-  -- client ne peut noter un produit qu'après réception de sa commande, et
+  -- RenseignÃ© lorsque l'avis provient d'un achat vÃ©rifiÃ© : garantit qu'un
+  -- client ne peut noter un produit qu'aprÃ¨s rÃ©ception de sa commande, et
   -- une seule fois par commande (voir contrainte unique ci-dessous).
   order_id uuid references orders (id) on delete set null,
   author text not null,
@@ -380,7 +380,7 @@ create table product_reviews (
 
 create index product_reviews_product_id_idx on product_reviews (product_id);
 
--- Empêche de laisser un avis sur une commande qui n'est pas encore livrée.
+-- EmpÃªche de laisser un avis sur une commande qui n'est pas encore livrÃ©e.
 create function check_review_order_delivered()
 returns trigger as $$
 begin
@@ -389,7 +389,7 @@ begin
       select 1 from orders
       where id = new.order_id and status = 'delivered' and customer_id = new.customer_id
     ) then
-      raise exception 'Vous ne pouvez noter un produit qu''après réception de votre commande.';
+      raise exception 'Vous ne pouvez noter un produit qu''aprÃ¨s rÃ©ception de votre commande.';
     end if;
   end if;
   return new;
@@ -400,7 +400,7 @@ create trigger product_reviews_require_delivery
   before insert on product_reviews
   for each row execute procedure check_review_order_delivered();
 
--- Recalcule la note moyenne et le nombre d'avis du produit concerné.
+-- Recalcule la note moyenne et le nombre d'avis du produit concernÃ©.
 create function refresh_product_rating()
 returns trigger as $$
 begin
@@ -418,14 +418,14 @@ create trigger product_reviews_refresh_rating
   for each row execute procedure refresh_product_rating();
 
 -- -----------------------------------------------------------------------------
--- discount_codes (codes de réduction généraux ou réservés à un client)
+-- discount_codes (codes de rÃ©duction gÃ©nÃ©raux ou rÃ©servÃ©s Ã  un client)
 -- -----------------------------------------------------------------------------
 create table discount_codes (
   id uuid primary key default gen_random_uuid(),
   code text not null unique,
   type text not null check (type in ('percentage', 'fixed')),
   value numeric(12, 2) not null check (value >= 0),
-  -- null = valable pour tous les clients ; renseigné = réservé à ce client.
+  -- null = valable pour tous les clients ; renseignÃ© = rÃ©servÃ© Ã  ce client.
   customer_id uuid references profiles (id) on delete cascade,
   max_uses int not null default 1 check (max_uses >= 1),
   used_count int not null default 0 check (used_count >= 0),
@@ -457,19 +457,19 @@ create index inventory_movements_variant_id_idx on inventory_movements (variant_
 create table shop_settings (
   id int primary key default 1 check (id = 1),
   shop_name text not null default 'FITORA',
-  slogan text not null default 'SPORT • STYLE • PERFORMANCE',
+  slogan text not null default 'SPORT â€¢ STYLE â€¢ PERFORMANCE',
   whatsapp text not null default '2250789777767',
   phone text not null default '2250789777767',
   email text not null default 'contact@fitora.ci',
-  address text not null default 'Abidjan, Côte d''Ivoire',
+  address text not null default 'Abidjan, CÃ´te d''Ivoire',
   delivery_fee numeric(12, 2) not null default 2000,
   cod_enabled boolean not null default true,
   standard_delivery_days int not null default 4,
   express_delivery_days int not null default 2,
-  express_surcharge_rate numeric(5, 2) not null default 2, -- % de majoration appliqué au tarif standard
-  -- Image de fond du hero sur l'accueil ; si vide, une image par défaut est utilisée côté frontend.
+  express_surcharge_rate numeric(5, 2) not null default 2, -- % de majoration appliquÃ© au tarif standard
+  -- Image de fond du hero sur l'accueil ; si vide, une image par dÃ©faut est utilisÃ©e cÃ´tÃ© frontend.
   hero_image_url text,
-  return_policy text not null default 'Vous disposez de 7 jours après réception de votre commande pour demander un retour ou un échange.',
+  return_policy text not null default 'Vous disposez de 7 jours aprÃ¨s rÃ©ception de votre commande pour demander un retour ou un Ã©change.',
   payment_numbers jsonb not null default '{
     "wave": "07 89 77 77 67",
     "orange_money": "07 89 77 77 67",
@@ -500,12 +500,12 @@ create table contact_messages (
 -- -----------------------------------------------------------------------------
 -- notifications
 -- -----------------------------------------------------------------------------
--- scope = 'broadcast' : diffusion générale (ex: promotion) visible par tous
+-- scope = 'broadcast' : diffusion gÃ©nÃ©rale (ex: promotion) visible par tous
 --   les clients ; customer_id est alors null.
--- scope = 'customer'  : notification ciblée (évolution de commande, réponse
---   à un message) ; customer_id désigne le destinataire.
+-- scope = 'customer'  : notification ciblÃ©e (Ã©volution de commande, rÃ©ponse
+--   Ã  un message) ; customer_id dÃ©signe le destinataire.
 -- La lecture est individuelle : chaque client a sa propre ligne dans
--- notification_reads une fois la notification consultée.
+-- notification_reads une fois la notification consultÃ©e.
 create table notifications (
   id uuid primary key default gen_random_uuid(),
   scope notification_scope not null,
@@ -560,14 +560,14 @@ returns boolean as $$
 $$ language sql security definer stable;
 
 -- ---------------------------------------------------------------------------
--- FAILLE CRITIQUE ÉVITÉE : la policy "Un client modifie son propre profil"
--- ci-dessous autorise un client à modifier N'IMPORTE QUELLE colonne de sa
+-- FAILLE CRITIQUE Ã‰VITÃ‰E : la policy "Un client modifie son propre profil"
+-- ci-dessous autorise un client Ã  modifier N'IMPORTE QUELLE colonne de sa
 -- propre ligne (RLS ne filtre pas par colonne), y compris `role`. Sans ce
--- trigger, n'importe quel client authentifié pourrait s'auto-promouvoir
+-- trigger, n'importe quel client authentifiÃ© pourrait s'auto-promouvoir
 -- administrateur avec un simple appel :
 --   supabase.from('profiles').update({ role: 'admin' }).eq('id', monId)
 -- Ce trigger annule silencieusement toute tentative de changer `role` tant
--- que l'auteur de la modification n'est pas déjà administrateur.
+-- que l'auteur de la modification n'est pas dÃ©jÃ  administrateur.
 -- ---------------------------------------------------------------------------
 create function prevent_role_self_escalation()
 returns trigger as $$
@@ -591,62 +591,62 @@ create policy "Un client modifie son propre profil"
   on profiles for update using (auth.uid() = id);
 
 -- --------------------------- categories / products (lecture publique) -------
-create policy "Catégories publiées visibles de tous"
+create policy "CatÃ©gories publiÃ©es visibles de tous"
   on categories for select using (published or is_admin());
 
-create policy "Admin gère les catégories"
+create policy "Admin gÃ¨re les catÃ©gories"
   on categories for all using (is_admin()) with check (is_admin());
 
-create policy "Produits publiés visibles de tous"
+create policy "Produits publiÃ©s visibles de tous"
   on products for select using (published or is_admin());
 
-create policy "Admin gère les produits"
+create policy "Admin gÃ¨re les produits"
   on products for all using (is_admin()) with check (is_admin());
 
 create policy "Images produits visibles de tous"
   on product_images for select using (true);
 
-create policy "Admin gère les images produits"
+create policy "Admin gÃ¨re les images produits"
   on product_images for all using (is_admin()) with check (is_admin());
 
 create policy "Variantes produits visibles de tous"
   on product_variants for select using (true);
 
-create policy "Admin gère les variantes"
+create policy "Admin gÃ¨re les variantes"
   on product_variants for all using (is_admin()) with check (is_admin());
 
--- Les mises à jour de stock (réservation/déduction) passent par les triggers
--- `security definer` ci-dessus ; les clients ne peuvent jamais écrire
+-- Les mises Ã  jour de stock (rÃ©servation/dÃ©duction) passent par les triggers
+-- `security definer` ci-dessus ; les clients ne peuvent jamais Ã©crire
 -- directement sur product_variants.
 
 create policy "Avis clients visibles de tous"
   on product_reviews for select using (true);
 
-create policy "Un client authentifié peut laisser un avis"
+create policy "Un client authentifiÃ© peut laisser un avis"
   on product_reviews for insert with check (auth.uid() = customer_id);
 
-create policy "Admin gère les avis"
+create policy "Admin gÃ¨re les avis"
   on product_reviews for all using (is_admin()) with check (is_admin());
 
 -- --------------------------- addresses ---------------------------
-create policy "Un client gère ses propres adresses"
+create policy "Un client gÃ¨re ses propres adresses"
   on addresses for all
   using (customer_id = auth.uid() or is_admin())
   with check (customer_id = auth.uid());
 
 -- --------------------------- orders / order_items -----------------
-create policy "Un client crée ses propres commandes"
+create policy "Un client crÃ©e ses propres commandes"
   on orders for insert with check (customer_id = auth.uid());
 
 create policy "Un client consulte ses propres commandes"
   on orders for select using (customer_id = auth.uid() or is_admin());
 
--- Les clients ne peuvent jamais modifier une commande après création
+-- Les clients ne peuvent jamais modifier une commande aprÃ¨s crÃ©ation
 -- (changement de statut, confirmation de paiement) : seul l'admin le peut.
 create policy "Seul l'administrateur modifie une commande"
   on orders for update using (is_admin()) with check (is_admin());
 
-create policy "Un client ajoute des articles à sa commande"
+create policy "Un client ajoute des articles Ã  sa commande"
   on order_items for insert
   with check (
     exists (select 1 from orders o where o.id = order_id and o.customer_id = auth.uid())
@@ -666,50 +666,95 @@ create policy "Admin uniquement sur les mouvements de stock"
   on inventory_movements for all using (is_admin()) with check (is_admin());
 
 -- --------------------------- shop_settings ---------------------------
-create policy "Paramètres boutique visibles de tous"
+create policy "ParamÃ¨tres boutique visibles de tous"
   on shop_settings for select using (true);
 
-create policy "Admin modifie les paramètres boutique"
+create policy "Admin modifie les paramÃ¨tres boutique"
   on shop_settings for update using (is_admin()) with check (is_admin());
 
 -- --------------------------- contact_messages ---------------------------
 create policy "Tout le monde peut envoyer un message"
   on contact_messages for insert with check (true);
 
-create policy "Un client consulte ses propres messages et leurs réponses"
+create policy "Un client consulte ses propres messages et leurs rÃ©ponses"
   on contact_messages for select using (customer_id = auth.uid() or is_admin());
 
-create policy "Admin gère les messages"
+create policy "Admin gÃ¨re les messages"
   on contact_messages for all using (is_admin()) with check (is_admin());
 
 -- --------------------------- notifications ---------------------------
-create policy "Un client voit les diffusions générales et ses notifications"
+create policy "Un client voit les diffusions gÃ©nÃ©rales et ses notifications"
   on notifications for select
   using (scope = 'broadcast' or customer_id = auth.uid() or is_admin());
 
-create policy "Admin crée des notifications (diffusion ou ciblée)"
+create policy "Admin crÃ©e des notifications (diffusion ou ciblÃ©e)"
   on notifications for insert with check (is_admin());
 
-create policy "Admin gère les notifications"
+create policy "Admin gÃ¨re les notifications"
   on notifications for all using (is_admin()) with check (is_admin());
 
 -- --------------------------- notification_reads ---------------------------
-create policy "Un client gère son propre état de lecture"
+create policy "Un client gÃ¨re son propre Ã©tat de lecture"
   on notification_reads for all
   using (customer_id = auth.uid())
   with check (customer_id = auth.uid());
 
+-- ---------------------------------------------------------------------------
+-- Utilisation atomique des codes de réduction
+-- ---------------------------------------------------------------------------
+create or replace function redeem_discount_code(p_code_id uuid)
+returns table (
+  id uuid,
+  code text,
+  type text,
+  value numeric,
+  customer_id uuid,
+  max_uses int,
+  used_count int,
+  expires_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Utilisateur non authentifié';
+  end if;
+
+  return query
+  update discount_codes
+  set used_count = discount_codes.used_count + 1
+  where discount_codes.id = p_code_id
+    and (discount_codes.customer_id is null or discount_codes.customer_id = auth.uid())
+    and discount_codes.used_count < discount_codes.max_uses
+    and (discount_codes.expires_at is null or discount_codes.expires_at > now())
+  returning
+    discount_codes.id,
+    discount_codes.code,
+    discount_codes.type,
+    discount_codes.value,
+    discount_codes.customer_id,
+    discount_codes.max_uses,
+    discount_codes.used_count,
+    discount_codes.expires_at;
+
+  if not found then
+    raise exception 'Code de réduction invalide, expiré ou déjà utilisé';
+  end if;
+end;
+$$;
 -- --------------------------- discount_codes ---------------------------
-create policy "Un client voit les codes qui lui sont réservés ou généraux"
+create policy "Un client voit les codes qui lui sont rÃ©servÃ©s ou gÃ©nÃ©raux"
   on discount_codes for select
   using (customer_id is null or customer_id = auth.uid() or is_admin());
 
--- La validation (code correct, non expiré, non utilisé) et le marquage
--- "used" sont effectués via une fonction security definer côté application
--- pour éviter qu'un client ne puisse falsifier ces champs lui-même.
-create policy "Admin gère les codes de réduction"
+-- La validation (code correct, non expirÃ©, non utilisÃ©) et le marquage
+-- "used" sont effectuÃ©s via une fonction security definer cÃ´tÃ© application
+-- pour Ã©viter qu'un client ne puisse falsifier ces champs lui-mÃªme.
+create policy "Admin gÃ¨re les codes de rÃ©duction"
   on discount_codes for all using (is_admin()) with check (is_admin());
 
 -- =============================================================================
--- Fin du schéma. Voir seed.sql pour les données de démonstration.
+-- Fin du schÃ©ma. Voir seed.sql pour les donnÃ©es de dÃ©monstration.
 -- =============================================================================
