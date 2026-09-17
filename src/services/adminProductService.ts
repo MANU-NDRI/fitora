@@ -1,92 +1,84 @@
-import type { Product, ProductVariant } from "@/types";
-import { PRODUCTS } from "@/services/mockData";
-import { persistProducts, recomputeCategoryCounts } from "@/services/adminDataStore";
-import { slugify } from "@/lib/format";
+import type { Product, ProductVariant } from '@/types';
+import { requireSupabase } from '@/lib/supabase';
+import { mapProduct } from './catalogMapper';
+import { slugify } from '@/lib/format';
 
-function delay<T>(value: T, ms = 200): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
+export type ProductInput = Omit<Product, 'id' | 'slug' | 'reviews' | 'reviewCount' | 'rating' | 'createdAt' | 'salesCount'>;
+const SELECT = '*, categories!inner(id,slug,name,sport,image,order_index,published), product_images(id,url,position), product_variants(id,size,color,color_hex,shoe_size,stock_available,stock_reserved,sku), product_reviews(id,author,rating,comment,created_at,customer_id,order_id)';
+
+async function readProduct(id: string): Promise<Product | null> {
+  const { data, error } = await requireSupabase().from('products').select(SELECT).eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? mapProduct(data) : null;
+}
+
+function productPayload(input: Partial<ProductInput>): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (!['images', 'variants', 'badges', 'categoryName', 'reviews', 'maxStock'].includes(key)) payload[key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)] = value;
+  }
+  return payload;
+}
+
+async function syncChildren(productId: string, input: Partial<ProductInput>): Promise<void> {
+  const supabase = requireSupabase();
+  if (input.images) {
+    await supabase.from('product_images').delete().eq('product_id', productId);
+    const { error } = await supabase.from('product_images').insert(input.images.map((url, position) => ({ product_id: productId, url, position })));
+    if (error) throw error;
+  }
+  if (input.variants) {
+    await supabase.from('product_variants').delete().eq('product_id', productId);
+    const { error } = await supabase.from('product_variants').insert(input.variants.map((variant) => ({ product_id: productId, size: variant.size ?? null, color: variant.color ?? null, color_hex: variant.colorHex ?? null, shoe_size: variant.shoeSize ?? null, stock_available: variant.stockAvailable, sku: variant.sku })));
+    if (error) throw error;
+  }
 }
 
 export async function adminGetProducts(): Promise<Product[]> {
-  return delay([...PRODUCTS].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+  const { data, error } = await requireSupabase().from('products').select(SELECT).order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(mapProduct);
 }
-
-export async function adminGetProduct(id: string): Promise<Product | null> {
-  return delay(PRODUCTS.find((p) => p.id === id) ?? null);
-}
-
-export type ProductInput = Omit<
-  Product,
-  "id" | "slug" | "reviews" | "reviewCount" | "rating" | "createdAt" | "salesCount"
->;
-
+export async function adminGetProduct(id: string): Promise<Product | null> { return readProduct(id); }
 export async function adminCreateProduct(input: ProductInput): Promise<Product> {
-  const product: Product = {
-    ...input,
-    id: `prod-${Date.now()}`,
-    slug: slugify(input.name),
-    reviews: [],
-    reviewCount: 0,
-    rating: 0,
-    createdAt: new Date().toISOString(),
-    salesCount: 0,
-  };
-  PRODUCTS.unshift(product);
-  persistProducts();
-  return delay(product);
+  const supabase = requireSupabase();
+  const { data, error } = await supabase.from('products').insert({ ...productPayload(input), slug: slugify(input.name) }).select('id').single();
+  if (error) throw error;
+  await syncChildren(data.id, input);
+  return (await readProduct(data.id))!;
 }
-
 export async function adminUpdateProduct(id: string, input: Partial<ProductInput>): Promise<Product | null> {
-  const index = PRODUCTS.findIndex((p) => p.id === id);
-  if (index === -1) return delay(null);
-  PRODUCTS[index] = {
-    ...PRODUCTS[index],
-    ...input,
-    slug: input.name ? slugify(input.name) : PRODUCTS[index].slug,
-  };
-  persistProducts();
-  return delay(PRODUCTS[index]);
+  const supabase = requireSupabase();
+  const payload = productPayload(input);
+  if (input.name) payload.slug = slugify(input.name);
+  if (Object.keys(payload).length) {
+    const { error } = await supabase.from('products').update(payload).eq('id', id);
+    if (error) throw error;
+  }
+  await syncChildren(id, input);
+  return readProduct(id);
 }
-
 export async function adminDeleteProduct(id: string): Promise<void> {
-  const index = PRODUCTS.findIndex((p) => p.id === id);
-  if (index !== -1) PRODUCTS.splice(index, 1);
-  persistProducts();
-  return delay(undefined);
+  const { error } = await requireSupabase().from('products').delete().eq('id', id);
+  if (error) throw error;
 }
-
 export async function adminTogglePublish(id: string): Promise<Product | null> {
-  const product = PRODUCTS.find((p) => p.id === id);
-  if (!product) return delay(null);
-  product.published = !product.published;
-  persistProducts();
-  return delay(product);
+  const current = await readProduct(id);
+  if (!current) return null;
+  const { error } = await requireSupabase().from('products').update({ published: !current.published }).eq('id', id);
+  if (error) throw error;
+  return readProduct(id);
 }
-
-/**
- * Permet à l'administrateur de déclarer manuellement un produit en rupture
- * de stock (ou de lever cette déclaration), indépendamment des quantités
- * réelles restantes sur les variantes.
- */
 export async function adminToggleOutOfStock(id: string): Promise<Product | null> {
-  const product = PRODUCTS.find((p) => p.id === id);
-  if (!product) return delay(null);
-  product.outOfStockOverride = !product.outOfStockOverride;
-  persistProducts();
-  return delay(product);
+  const current = await readProduct(id);
+  if (!current) return null;
+  const { error } = await requireSupabase().from('products').update({ out_of_stock_override: !current.outOfStockOverride }).eq('id', id);
+  if (error) throw error;
+  return readProduct(id);
 }
-
-export async function adminUpdateVariantStock(
-  productId: string,
-  variantId: string,
-  updates: Partial<Pick<ProductVariant, "stockAvailable" | "stockReserved">>
-): Promise<Product | null> {
-  const product = PRODUCTS.find((p) => p.id === productId);
-  const variant = product?.variants.find((v) => v.id === variantId);
-  if (!product || !variant) return delay(null);
-  Object.assign(variant, updates);
-  persistProducts();
-  return delay(product);
+export async function adminUpdateVariantStock(productId: string, variantId: string, updates: Partial<Pick<ProductVariant, 'stockAvailable'>>): Promise<Product | null> {
+  const { error } = await requireSupabase().from('product_variants').update({ stock_available: updates.stockAvailable }).eq('id', variantId).eq('product_id', productId);
+  if (error) throw error;
+  return readProduct(productId);
 }
-
-export { recomputeCategoryCounts };
+export { recomputeCategoryCounts } from './adminDataStore';

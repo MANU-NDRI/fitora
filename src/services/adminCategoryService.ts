@@ -1,53 +1,47 @@
-import type { Category } from "@/types";
-import { CATEGORIES } from "@/services/mockData";
-import { persistCategories } from "@/services/adminDataStore";
-import { slugify } from "@/lib/format";
+import type { Category } from '@/types';
+import { requireSupabase } from '@/lib/supabase';
+import { mapCategory } from './catalogMapper';
+import { slugify } from '@/lib/format';
 
-function delay<T>(value: T, ms = 200): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
-}
+export type CategoryInput = Omit<Category, 'id' | 'slug' | 'productCount'>;
+
+const withCount = async (row: Record<string, unknown>): Promise<Category> => {
+  const category = mapCategory(row as never);
+  const { count, error } = await requireSupabase().from('products').select('id', { count: 'exact', head: true }).eq('category_id', category.id).eq('published', true);
+  if (error) throw error;
+  return { ...category, productCount: count ?? 0 };
+};
 
 export async function adminGetCategories(): Promise<Category[]> {
-  return delay([...CATEGORIES].sort((a, b) => a.order - b.order));
+  const { data, error } = await requireSupabase().from('categories').select('*').order('order_index');
+  if (error) throw error;
+  return Promise.all((data ?? []).map((row) => withCount(row)));
 }
 
-export type CategoryInput = Omit<Category, "id" | "slug" | "productCount">;
-
 export async function adminCreateCategory(input: CategoryInput): Promise<Category> {
-  const category: Category = {
-    ...input,
-    id: `cat-${Date.now()}`,
-    slug: slugify(input.name),
-    productCount: 0,
-  };
-  CATEGORIES.push(category);
-  persistCategories();
-  return delay(category);
+  const { data, error } = await requireSupabase().from('categories').insert({ slug: slugify(input.name), name: input.name, image: input.image, sport: input.sport, order_index: input.order, published: input.published }).select('*').single();
+  if (error) throw error;
+  return withCount(data);
 }
 
 export async function adminUpdateCategory(id: string, input: Partial<CategoryInput>): Promise<Category | null> {
-  const index = CATEGORIES.findIndex((c) => c.id === id);
-  if (index === -1) return delay(null);
-  CATEGORIES[index] = {
-    ...CATEGORIES[index],
-    ...input,
-    slug: input.name ? slugify(input.name) : CATEGORIES[index].slug,
-  };
-  persistCategories();
-  return delay(CATEGORIES[index]);
+  const payload = { ...input, ...(input.name ? { slug: slugify(input.name) } : {}), ...(input.order !== undefined ? { order_index: input.order } : {}) } as Record<string, unknown>;
+  delete payload.order;
+  const { data, error } = await requireSupabase().from('categories').update(payload).eq('id', id).select('*').maybeSingle();
+  if (error) throw error;
+  return data ? withCount(data) : null;
 }
 
 export async function adminDeleteCategory(id: string): Promise<void> {
-  const index = CATEGORIES.findIndex((c) => c.id === id);
-  if (index !== -1) CATEGORIES.splice(index, 1);
-  persistCategories();
-  return delay(undefined);
+  const { error } = await requireSupabase().from('categories').delete().eq('id', id);
+  if (error) throw new Error('Cette catégorie est utilisée par des produits ou ne peut pas être supprimée.');
 }
 
 export async function adminTogglePublishCategory(id: string): Promise<Category | null> {
-  const category = CATEGORIES.find((c) => c.id === id);
-  if (!category) return delay(null);
-  category.published = !category.published;
-  persistCategories();
-  return delay(category);
+  const supabase = requireSupabase();
+  const { data: current, error: readError } = await supabase.from('categories').select('*').eq('id', id).single();
+  if (readError) throw readError;
+  const { data, error } = await supabase.from('categories').update({ published: !current.published }).eq('id', id).select('*').maybeSingle();
+  if (error) throw error;
+  return data ? withCount(data) : null;
 }

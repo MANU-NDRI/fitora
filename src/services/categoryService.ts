@@ -1,16 +1,15 @@
-import type { Category } from "@/types";
-import { CATEGORIES } from "@/services/mockData";
-
-function delay<T>(value: T, ms = 100): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
-}
+import type { Category } from '@/types';
+import { requireSupabase } from '@/lib/supabase';
+import { mapCategory } from './catalogMapper';
 
 export async function getCategories(): Promise<Category[]> {
-  const list = [...CATEGORIES].filter((c) => c.published).sort((a, b) => a.order - b.order);
-  return delay(list);
+  const supabase = requireSupabase();
+  const { data, error } = await supabase.from('categories').select('*, products:products(count)').eq('published', true).order('order_index');
+  if (error) throw error;
+  return (data ?? []).map((row) => ({ ...mapCategory(row), productCount: row.products?.[0]?.count ?? 0 }));
 }
 
 export async function getCategoryBySlug(slug: string): Promise<Category | null> {
-  const category = CATEGORIES.find((c) => c.slug === slug && c.published) ?? null;
-  return delay(category);
+  const categories = await getCategories();
+  return categories.find((category) => category.slug === slug) ?? null;
 }
