@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bell, CheckCheck } from "lucide-react";
+import { Bell, CheckCheck, Trash2 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import {
+  deleteNotification,
   getNotificationsForUser,
   markAllAsRead,
   markAsRead,
@@ -14,10 +15,13 @@ import { cn } from "@/lib/cn";
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diffMs / 60000);
+
   if (minutes < 1) return "à l'instant";
   if (minutes < 60) return `il y a ${minutes} min`;
+
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `il y a ${hours} h`;
+
   const days = Math.floor(hours / 24);
   return `il y a ${days} j`;
 }
@@ -26,30 +30,49 @@ export function NotificationBell() {
   const user = useAuthStore((s) => s.user);
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationView[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   async function refresh() {
     if (!user) return;
-    setNotifications(await getNotificationsForUser(user.id));
+
+    try {
+      const data = await getNotificationsForUser(user.id);
+      setNotifications(data);
+    } catch (error) {
+      console.error("Erreur récupération notifications :", error);
+    }
   }
 
   useEffect(() => {
     refresh();
-    // Rafraîchit périodiquement pour refléter les statuts de commande / réponses admin.
+
+    // Rafraîchit périodiquement pour refléter les statuts
+    // de commande / réponses admin.
     const interval = setInterval(refresh, 15000);
+
     return () => clearInterval(interval);
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
         setOpen(false);
       }
     }
+
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, []);
 
   if (!user) return null;
@@ -58,26 +81,68 @@ export function NotificationBell() {
 
   async function handleOpenNotification(n: NotificationView) {
     if (!user) return;
-    await markAsRead(user.id, n.id);
-    refresh();
-    setOpen(false);
-    if (n.link) navigate(n.link);
+
+    try {
+      if (!n.read) {
+        await markAsRead(user.id, n.id);
+      }
+
+      await refresh();
+      setOpen(false);
+
+      if (n.link) {
+        navigate(n.link);
+      }
+    } catch (error) {
+      console.error("Erreur lecture notification :", error);
+    }
   }
 
   async function handleMarkAllRead() {
     if (!user) return;
-    await markAllAsRead(user.id);
-    refresh();
+
+    try {
+      await markAllAsRead(user.id);
+      await refresh();
+    } catch (error) {
+      console.error(
+        "Erreur marquage des notifications comme lues :",
+        error,
+      );
+    }
+  }
+
+  async function handleDeleteNotification(
+    e: React.MouseEvent,
+    notificationId: string,
+  ) {
+    e.stopPropagation();
+
+    if (!user || deletingId === notificationId) return;
+
+    try {
+      setDeletingId(notificationId);
+
+      await deleteNotification(user.id, notificationId);
+      await refresh();
+    } catch (error) {
+      console.error("Erreur suppression notification :", error);
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
     <div ref={containerRef} className="relative">
       <button
+        type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label="Notifications"
+        aria-expanded={open}
         className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/10"
       >
         <Bell size={20} />
+
         {unreadCount > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-fitora-green px-1 text-[10px] font-bold text-fitora-black">
             {unreadCount > 9 ? "9+" : unreadCount}
@@ -95,13 +160,18 @@ export function NotificationBell() {
             className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-fitora-border bg-fitora-charcoal shadow-xl sm:w-96"
           >
             <div className="flex items-center justify-between border-b border-fitora-border px-4 py-3">
-              <p className="font-display text-sm font-bold">Notifications</p>
+              <p className="font-display text-sm font-bold">
+                Notifications
+              </p>
+
               {unreadCount > 0 && (
                 <button
+                  type="button"
                   onClick={handleMarkAllRead}
-                  className="flex items-center gap-1 text-xs text-fitora-gray hover:text-fitora-green"
+                  className="flex items-center gap-1 text-xs text-fitora-gray transition-colors hover:text-fitora-green"
                 >
-                  <CheckCheck size={13} /> Tout marquer comme lu
+                  <CheckCheck size={13} />
+                  Tout marquer comme lu
                 </button>
               )}
             </div>
@@ -115,20 +185,53 @@ export function NotificationBell() {
                 <ul className="divide-y divide-fitora-border">
                   {notifications.map((n) => (
                     <li key={n.id}>
-                      <button
-                        onClick={() => handleOpenNotification(n)}
+                      <div
                         className={cn(
-                          "block w-full px-4 py-3 text-left transition-colors hover:bg-white/5",
-                          !n.read && "bg-fitora-green/5"
+                          "px-4 py-3 transition-colors hover:bg-white/5",
+                          !n.read && "bg-fitora-green/5",
                         )}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-semibold">{n.title}</p>
-                          {!n.read && <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-fitora-green" />}
+                        <div className="flex items-start gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenNotification(n)}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-sm font-semibold">
+                                {n.title}
+                              </p>
+
+                              {!n.read && (
+                                <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-fitora-green" />
+                              )}
+                            </div>
+
+                            <p className="mt-0.5 line-clamp-2 text-xs text-fitora-gray">
+                              {n.message}
+                            </p>
+
+                            <p className="mt-1 text-[11px] text-fitora-gray-dim">
+                              {timeAgo(n.createdAt)}
+                            </p>
+                          </button>
+
+                          {n.scope === "customer" && (
+                            <button
+                              type="button"
+                              onClick={(e) =>
+                                handleDeleteNotification(e, n.id)
+                              }
+                              disabled={deletingId === n.id}
+                              aria-label="Supprimer la notification"
+                              title="Supprimer"
+                              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-fitora-gray transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </div>
-                        <p className="mt-0.5 line-clamp-2 text-xs text-fitora-gray">{n.message}</p>
-                        <p className="mt-1 text-[11px] text-fitora-gray-dim">{timeAgo(n.createdAt)}</p>
-                      </button>
+                      </div>
                     </li>
                   ))}
                 </ul>

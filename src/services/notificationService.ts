@@ -238,3 +238,28 @@ export async function markAllAsRead(customerId: string): Promise<void> {
     throw error;
   }
 }
+export async function deleteNotification(
+  customerId: string,
+  notificationId: string,
+): Promise<void> {
+  const currentUserId = await getCurrentUserId();
+
+  if (!currentUserId) {
+    throw new Error("Vous devez être connecté.");
+  }
+
+  if (currentUserId !== customerId) {
+    throw new Error("Utilisateur non autorisé.");
+  }
+
+  const { error } = await supabase
+    .from("notifications")
+    .delete()
+    .eq("id", notificationId)
+    .eq("customer_id", customerId)
+    .eq("scope", "customer");
+
+  if (error) {
+    throw error;
+  }
+}
