@@ -252,14 +252,53 @@ export async function deleteNotification(
     throw new Error("Utilisateur non autorisé.");
   }
 
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from("notifications")
-    .delete()
+    .delete({ count: "exact" })
     .eq("id", notificationId)
     .eq("customer_id", customerId)
     .eq("scope", "customer");
 
   if (error) {
     throw error;
+  }
+
+  // Sous Row Level Security, une suppression non autorisée par la policy
+  // n'échoue pas avec une erreur : elle affecte simplement 0 ligne. Sans ce
+  // contrôle, l'appelant croirait la suppression réussie alors que rien n'a
+  // été supprimé côté base (la notification réapparaîtrait après rafraîchissement).
+  if (count === 0) {
+    throw new Error(
+      "Suppression refusée : cette notification n'a pas pu être supprimée (permissions insuffisantes ou notification déjà supprimée)."
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Gestion admin
+// ---------------------------------------------------------------------------
+
+/**
+ * Supprime n'importe quelle notification (diffusion ou ciblée), réservé à
+ * l'administrateur. Repose sur la policy RLS "Admin gère les notifications"
+ * (is_admin()) déjà en place côté base — aucune modification de policy
+ * nécessaire pour cette fonction.
+ */
+export async function adminDeleteNotification(
+  notificationId: string,
+): Promise<void> {
+  const { error, count } = await supabase
+    .from("notifications")
+    .delete({ count: "exact" })
+    .eq("id", notificationId);
+
+  if (error) {
+    throw error;
+  }
+
+  if (count === 0) {
+    throw new Error(
+      "Suppression refusée : action réservée aux administrateurs, ou notification déjà supprimée."
+    );
   }
 }

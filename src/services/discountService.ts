@@ -1,6 +1,11 @@
+
 import { supabase } from "@/lib/supabase";
 import type { DiscountCode, DiscountType } from "@/types";
 import { sendCustomerNotification } from "@/services/notificationService";
+
+// ---------------------------------------------------------------------------
+// TYPES
+// ---------------------------------------------------------------------------
 
 interface DiscountCodeRow {
   id: string;
@@ -13,24 +18,40 @@ interface DiscountCodeRow {
   expires_at: string | null;
   created_by: string | null;
   created_at: string;
-  profiles?: {
-    full_name: string | null;
-  } | null;
 }
 
-function mapDiscountCode(row: DiscountCodeRow): DiscountCode {
+interface CustomerProfileRow {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// MAPPING
+// ---------------------------------------------------------------------------
+
+function mapDiscountCode(
+  row: DiscountCodeRow,
+  customerName?: string
+): DiscountCode {
   return {
     id: row.id,
     code: row.code,
     type: row.type,
     value: Number(row.value),
     customerId: row.customer_id ?? undefined,
-    customerName: row.profiles?.full_name ?? undefined,
+    customerName: customerName || undefined,
     maxUses: Number(row.max_uses),
     usedCount: Number(row.used_count),
     expiresAt: row.expires_at ?? undefined,
     createdAt: row.created_at,
   };
+}
+
+function getCustomerFullName(
+  profile: CustomerProfileRow
+): string {
+  return `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim();
 }
 
 async function getCurrentUserId(): Promise<string | null> {
@@ -43,6 +64,10 @@ async function getCurrentUserId(): Promise<string | null> {
   return data.user.id;
 }
 
+// ---------------------------------------------------------------------------
+// GÉNÉRATION DU CODE
+// ---------------------------------------------------------------------------
+
 function generateCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "FITORA-";
@@ -54,6 +79,8 @@ function generateCode(): string {
   return code;
 }
 
+// Sélection des colonnes existantes dans discount_codes.
+// Ne pas joindre profiles.full_name : cette colonne n'existe pas.
 const discountSelect = `
   id,
   code,
@@ -64,14 +91,11 @@ const discountSelect = `
   used_count,
   expires_at,
   created_by,
-  created_at,
-  profiles:customer_id (
-    full_name
-  )
+  created_at
 `;
 
 // ---------------------------------------------------------------------------
-// ADMIN
+// ADMIN : CRÉER UN CODE DE RÉDUCTION
 // ---------------------------------------------------------------------------
 
 export async function adminCreateDiscountCode(input: {
@@ -90,8 +114,16 @@ export async function adminCreateDiscountCode(input: {
   }
 
   const code = (input.code?.trim() || generateCode()).toUpperCase();
-  const maxUses = Math.max(1, input.maxUses ?? 1);
+  const maxUses = Math.max(1, Math.floor(input.maxUses ?? 1));
   const value = Math.max(0, input.value);
+
+  if (!Number.isFinite(value)) {
+    throw new Error("La valeur de la réduction est invalide.");
+  }
+
+  if (input.type === "percentage" && value > 100) {
+    throw new Error("La réduction en pourcentage ne peut pas dépasser 100 %.");
+  }
 
   const { data, error } = await supabase
     .from("discount_codes")
@@ -99,7 +131,7 @@ export async function adminCreateDiscountCode(input: {
       code,
       type: input.type,
       value,
-      customer_id: input.customerId ?? null,
+      customer_id: input.customerId || null,
       max_uses: maxUses,
       used_count: 0,
       expires_at: input.expiresAt || null,
@@ -113,28 +145,43 @@ export async function adminCreateDiscountCode(input: {
       throw new Error("Ce code promo existe déjà.");
     }
 
-    throw error;
+    console.error("Erreur création code de réduction :", error);
+    throw new Error(error.message || "Impossible de créer le code de réduction.");
   }
 
   const discountCode = mapDiscountCode(
     data as unknown as DiscountCodeRow,
+    input.customerName
   );
 
+  // Notification facultative : une erreur de notification
+  // ne doit pas annuler ni masquer la création réussie du code.
   if (discountCode.customerId) {
     const valueLabel =
       discountCode.type === "percentage"
         ? `${discountCode.value}%`
         : `${discountCode.value} FCFA`;
 
-    await sendCustomerNotification(discountCode.customerId, {
-      title: "Un code de réduction vous a été offert 🎁",
-      message: `Profitez de ${valueLabel} de réduction avec le code ${discountCode.code} lors de votre prochaine commande.`,
-      link: "/boutique",
-    });
+    try {
+      await sendCustomerNotification(discountCode.customerId, {
+        title: "Un code de réduction vous a été offert 🎁",
+        message: `Profitez de ${valueLabel} de réduction avec le code ${discountCode.code} lors de votre prochaine commande.`,
+        link: "/boutique",
+      });
+    } catch (notificationError) {
+      console.error(
+        "Code créé, mais erreur lors de la notification du client :",
+        notificationError
+      );
+    }
   }
 
   return discountCode;
 }
+
+// ---------------------------------------------------------------------------
+// ADMIN : RÉCUPÉRER LES CODES DE RÉDUCTION
+// ---------------------------------------------------------------------------
 
 export async function adminGetDiscountCodes(): Promise<DiscountCode[]> {
   const { data, error } = await supabase
@@ -143,16 +190,65 @@ export async function adminGetDiscountCodes(): Promise<DiscountCode[]> {
     .order("created_at", { ascending: false });
 
   if (error) {
+    console.error("Erreur lecture codes de réduction :", error);
     throw error;
   }
 
-  return (data ?? []).map((row) =>
-    mapDiscountCode(row as unknown as DiscountCodeRow),
+  const rows = (data ?? []) as unknown as DiscountCodeRow[];
+
+  if (rows.length === 0) {
+    return [];
+  }
+
+  // Récupérer les identifiants uniques des clients associés aux codes.
+  const customerIds = [
+    ...new Set(
+      rows
+        .map((row) => row.customer_id)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+
+  // Aucun code attribué à un client précis.
+  if (customerIds.length === 0) {
+    return rows.map((row) => mapDiscountCode(row));
+  }
+
+  // Les profils utilisent first_name et last_name,
+  // et non full_name.
+  const { data: profiles, error: profilesError } = await supabase
+    .from("profiles")
+    .select("id, first_name, last_name")
+    .in("id", customerIds);
+
+  if (profilesError) {
+    console.error("Erreur lecture noms des clients :", profilesError);
+    throw profilesError;
+  }
+
+  const customerNames = new Map<string, string>(
+    ((profiles ?? []) as CustomerProfileRow[]).map((profile) => [
+      profile.id,
+      getCustomerFullName(profile),
+    ])
+  );
+
+  return rows.map((row) =>
+    mapDiscountCode(
+      row,
+      row.customer_id
+        ? customerNames.get(row.customer_id) || undefined
+        : undefined
+    )
   );
 }
 
+// ---------------------------------------------------------------------------
+// ADMIN : SUPPRIMER UN CODE DE RÉDUCTION
+// ---------------------------------------------------------------------------
+
 export async function adminDeleteDiscountCode(
-  id: string,
+  id: string
 ): Promise<void> {
   const { error } = await supabase
     .from("discount_codes")
@@ -160,12 +256,13 @@ export async function adminDeleteDiscountCode(
     .eq("id", id);
 
   if (error) {
+    console.error("Erreur suppression code de réduction :", error);
     throw error;
   }
 }
 
 // ---------------------------------------------------------------------------
-// VALIDATION
+// VALIDATION D'UN CODE DE RÉDUCTION
 // ---------------------------------------------------------------------------
 
 export interface DiscountValidationResult {
@@ -178,7 +275,7 @@ export interface DiscountValidationResult {
 export async function validateDiscountCode(
   rawCode: string,
   customerId: string,
-  subtotal: number,
+  subtotal: number
 ): Promise<DiscountValidationResult> {
   const normalizedCode = rawCode.trim().toUpperCase();
 
@@ -196,6 +293,7 @@ export async function validateDiscountCode(
     .maybeSingle();
 
   if (error) {
+    console.error("Erreur validation code de réduction :", error);
     throw error;
   }
 
@@ -206,15 +304,12 @@ export async function validateDiscountCode(
     };
   }
 
-  const code = mapDiscountCode(
-    data as unknown as DiscountCodeRow,
-  );
+  const code = mapDiscountCode(data as unknown as DiscountCodeRow);
 
   if (code.usedCount >= code.maxUses) {
     return {
       valid: false,
-      reason:
-        "Ce code a atteint son nombre maximum d'utilisations.",
+      reason: "Ce code a atteint son nombre maximum d'utilisations.",
     };
   }
 
@@ -253,8 +348,18 @@ export async function validateDiscountCode(
 // UTILISATION DU CODE
 // ---------------------------------------------------------------------------
 
+/**
+ * @deprecated
+ * Ne pas appeler depuis le frontend.
+ *
+ * La validation et la consommation du code doivent être gérées
+ * de façon atomique par create_order_transaction.
+ *
+ * Ne pas appeler cette fonction lors du paiement : cela pourrait
+ * consommer le code une seconde fois.
+ */
 export async function redeemDiscountCode(
-  codeId: string,
+  codeId: string
 ): Promise<void> {
   const { error } = await supabase.rpc("redeem_discount_code", {
     p_code_id: codeId,

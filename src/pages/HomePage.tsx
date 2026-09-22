@@ -5,11 +5,12 @@ import { Truck, ShieldCheck, Wallet, MessageCircle, ArrowRight, LogIn, UserPlus 
 import type { Category, Product } from "@/types";
 import { getCategories } from "@/services/categoryService";
 import { getNewArrivals, getPopularProducts, getPromotions } from "@/services/productService";
-import { getShopSettings, DEFAULT_HERO_IMAGE } from "@/services/settingsService";
+import { subscribeToShopSettings, DEFAULT_HERO_IMAGE } from "@/services/settingsService";
 import { useAuthStore } from "@/store/authStore";
 import { ProductCard } from "@/components/product/ProductCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
+import { useTranslation } from "@/i18n/i18nStore";
 
 const ADVANTAGES = [
   { icon: Truck, title: "Livraison rapide", desc: "Livraison partout à Abidjan et en Côte d'Ivoire." },
@@ -19,6 +20,7 @@ const ADVANTAGES = [
 ];
 
 export function HomePage() {
+  const { t } = useTranslation();
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [newArrivals, setNewArrivals] = useState<Product[] | null>(null);
   const [popular, setPopular] = useState<Product[] | null>(null);
@@ -30,7 +32,14 @@ export function HomePage() {
     getNewArrivals(8).then(setNewArrivals);
     getPopularProducts(8).then(setPopular);
     getPromotions(8).then(setPromos);
-    getShopSettings().then((s) => setHeroImage(s.heroImageUrl || DEFAULT_HERO_IMAGE));
+
+    // S'abonne aux paramètres boutique : l'image hero se met à jour dès que
+    // l'administrateur l'enregistre, sans que le client ait besoin de
+    // recharger la page (voir settingsService.subscribeToShopSettings).
+    const unsubscribe = subscribeToShopSettings((s) =>
+      setHeroImage(s.heroImageUrl || DEFAULT_HERO_IMAGE)
+    );
+    return unsubscribe;
   }, []);
 
   return (
@@ -38,7 +47,7 @@ export function HomePage() {
       <HeroSection heroImage={heroImage} />
       <AuthCallToAction />
 
-      <Section title="Catégories" subtitle="Trouvez votre discipline">
+      <Section title={t("nav.categories")} subtitle={t("home.categoriesSubtitle")}>
         {!categories ? (
           <CardGridSkeleton count={6} />
         ) : (
@@ -50,16 +59,16 @@ export function HomePage() {
         )}
       </Section>
 
-      <Section title="Nouveautés FITORA" subtitle="Fraîchement arrivé" viewAllTo="/nouveautes">
+      <Section title={t("home.newArrivalsTitle")} subtitle={t("home.newArrivalsSubtitle")} viewAllTo="/nouveautes">
         {!newArrivals ? <ProductGridSkeleton /> : <ProductGrid products={newArrivals} />}
       </Section>
 
-      <Section title="Les plus populaires" subtitle="Ce que la communauté préfère" viewAllTo="/boutique?tri=populaire">
+      <Section title={t("home.popularTitle")} subtitle={t("home.popularSubtitle")} viewAllTo="/boutique?tri=populaire">
         {!popular ? <ProductGridSkeleton /> : <ProductGrid products={popular} />}
       </Section>
 
       {promos && promos.length > 0 && (
-        <Section title="Promotions" subtitle="Offres à ne pas manquer" viewAllTo="/promotions">
+        <Section title={t("home.promotionsTitle")} subtitle={t("home.promotionsSubtitle")} viewAllTo="/promotions">
           <ProductGrid products={promos} />
         </Section>
       )}
@@ -70,6 +79,7 @@ export function HomePage() {
 }
 
 function AuthCallToAction() {
+  const { t } = useTranslation();
   const isAuthenticated = Boolean(useAuthStore((s) => s.user));
 
   if (isAuthenticated) return null;
@@ -79,21 +89,21 @@ function AuthCallToAction() {
       <div className="container-fitora flex flex-col items-center justify-between gap-4 py-6 md:flex-row md:py-7">
         <div className="text-center md:text-left">
           <p className="font-display text-base font-bold text-fitora-white">
-            Rejoignez FITORA pour commander
+            {t("home.joinTitle")}
           </p>
           <p className="text-sm text-fitora-gray">
-            Créez votre compte pour suivre vos commandes, vos favoris et profiter de nos offres.
+            {t("home.joinSubtitle")}
           </p>
         </div>
         <div className="flex flex-shrink-0 gap-3">
           <Link to="/login">
             <Button variant="outline">
-              <LogIn size={16} /> Se connecter
+              <LogIn size={16} /> {t("auth.loginButton")}
             </Button>
           </Link>
           <Link to="/register">
             <Button>
-              <UserPlus size={16} /> Créer un compte
+              <UserPlus size={16} /> {t("auth.registerButton")}
             </Button>
           </Link>
         </div>
@@ -103,6 +113,7 @@ function AuthCallToAction() {
 }
 
 function HeroSection({ heroImage }: { heroImage: string }) {
+  const { t } = useTranslation();
   return (
     <section className="relative overflow-hidden bg-fitora-black">
       <div className="absolute inset-0">
@@ -148,11 +159,11 @@ function HeroSection({ heroImage }: { heroImage: string }) {
           className="mt-8 flex flex-wrap gap-3"
         >
           <Link to="/boutique">
-            <Button size="lg">Découvrir la boutique</Button>
+            <Button size="lg">{t("home.shopNow")}</Button>
           </Link>
           <Link to="/nouveautes">
             <Button size="lg" variant="outline">
-              Voir les nouveautés
+              {t("home.viewNewArrivals")}
             </Button>
           </Link>
         </motion.div>
@@ -172,6 +183,9 @@ function Section({
   viewAllTo?: string;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation();
+  const seeAllLabel = t("common.seeAll");
+
   return (
     <section className="container-fitora py-12 md:py-16">
       <div className="mb-6 flex items-end justify-between md:mb-8">
@@ -184,7 +198,7 @@ function Section({
             to={viewAllTo}
             className="hidden items-center gap-1 text-sm font-semibold text-fitora-green hover:underline sm:flex"
           >
-            Tout voir <ArrowRight size={14} />
+            {seeAllLabel} <ArrowRight size={14} />
           </Link>
         )}
       </div>

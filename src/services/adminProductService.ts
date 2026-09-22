@@ -1,5 +1,5 @@
 ﻿import { supabase } from "@/lib/supabase";
-import { mapProduct } from "@/services/productService";
+import { mapProduct, invalidateProductsCache } from "@/services/productService";
 import type { Product, ProductVariant, Sport } from "@/types";
 import { slugify } from "@/lib/format";
 
@@ -246,6 +246,11 @@ export async function adminCreateProduct(
     );
   }
 
+  // Le catalogue vu par les clients (Accueil, Boutique) est mis en cache
+  // côté productService : on l'invalide immédiatement pour que ce nouveau
+  // produit apparaisse sans attendre l'expiration naturelle du cache.
+  invalidateProductsCache();
+
   return product;
 }
 
@@ -288,6 +293,8 @@ export async function adminUpdateProduct(
 
   await syncChildren(id, next);
 
+  invalidateProductsCache();
+
   return fetchProduct(id);
 }
 
@@ -300,6 +307,8 @@ export async function adminDeleteProduct(
     .eq("id", id);
 
   if (error) throw error;
+
+  invalidateProductsCache();
 }
 
 export async function adminTogglePublish(
@@ -317,6 +326,8 @@ export async function adminTogglePublish(
     .eq("id", id);
 
   if (error) throw error;
+
+  invalidateProductsCache();
 
   return fetchProduct(id);
 }
@@ -336,6 +347,8 @@ export async function adminToggleOutOfStock(
     .eq("id", id);
 
   if (error) throw error;
+
+  invalidateProductsCache();
 
   return fetchProduct(id);
 }
@@ -367,6 +380,8 @@ export async function adminUpdateVariantStock(
     .eq("product_id", productId);
 
   if (error) throw error;
+
+  invalidateProductsCache();
 
   return fetchProduct(productId);
 }

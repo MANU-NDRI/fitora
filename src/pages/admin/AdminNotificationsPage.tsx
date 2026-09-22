@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Megaphone, Send } from "lucide-react";
+import { Megaphone, Send, Trash2 } from "lucide-react";
 import type { AppNotification } from "@/types";
-import { adminSendBroadcast, adminGetBroadcasts } from "@/services/notificationService";
+import { adminSendBroadcast, adminGetBroadcasts, adminDeleteNotification } from "@/services/notificationService";
 import { useToastStore } from "@/store/toastStore";
 import { Button } from "@/components/ui/Button";
 import { formatDateTime } from "@/lib/format";
@@ -10,6 +10,7 @@ export function AdminNotificationsPage() {
   const [broadcasts, setBroadcasts] = useState<AppNotification[]>([]);
   const [form, setForm] = useState({ title: "", message: "", link: "" });
   const [sending, setSending] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const pushToast = useToastStore((s) => s.push);
 
   async function refresh() {
@@ -36,6 +37,32 @@ export function AdminNotificationsPage() {
       refresh();
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleDeleteBroadcast(id: string) {
+    if (deletingId === id) return;
+
+    // Diffusion générale : la suppression la retire immédiatement pour tous
+    // les clients (une seule ligne en base, pas de copie par client) — on
+    // confirme donc explicitement avant d'agir.
+    const confirmed = window.confirm(
+      "Supprimer définitivement cette diffusion ? Elle disparaîtra du compte de tous les clients."
+    );
+    if (!confirmed) return;
+
+    setDeletingId(id);
+    try {
+      await adminDeleteNotification(id);
+      pushToast("Diffusion supprimée", "success");
+      await refresh();
+    } catch (error) {
+      pushToast(
+        error instanceof Error ? error.message : "Impossible de supprimer cette diffusion.",
+        "error"
+      );
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -97,9 +124,26 @@ export function AdminNotificationsPage() {
       <ul className="space-y-2">
         {broadcasts.map((b) => (
           <li key={b.id} className="rounded-xl bg-fitora-charcoal p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold">{b.title}</p>
-              <span className="text-xs text-fitora-gray-dim">{formatDateTime(b.createdAt)}</span>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-fitora-green/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-fitora-green">
+                  Diffusion
+                </span>
+                <p className="text-sm font-semibold">{b.title}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-fitora-gray-dim">{formatDateTime(b.createdAt)}</span>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteBroadcast(b.id)}
+                  disabled={deletingId === b.id}
+                  aria-label="Supprimer la diffusion"
+                  title="Supprimer"
+                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-fitora-gray transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
             <p className="mt-1 text-sm text-fitora-gray">{b.message}</p>
           </li>

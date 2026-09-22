@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import type { Category, Sport } from "@/types";
 import { slugify } from "@/lib/format";
+import { invalidateCategoriesCache } from "@/services/categoryService";
 
 type CategoryRow = { id: string; slug: string; name: string; image: string; sport: Sport; order_index: number; published: boolean };
 type CategoryCountRow = { category_id: string | null; published: boolean };
@@ -20,7 +21,9 @@ export async function adminGetCategories(): Promise<Category[]> {
 }
 export async function adminCreateCategory(input: CategoryInput): Promise<Category> {
   const { data, error } = await supabase.from("categories").insert({ slug: slugify(input.name), name: input.name.trim(), image: input.image, sport: input.sport, order_index: input.order, published: input.published }).select("*").single();
-  if (error) throw error; return mapCategory(data as unknown as CategoryRow);
+  if (error) throw error;
+  invalidateCategoriesCache();
+  return mapCategory(data as unknown as CategoryRow);
 }
 export async function adminUpdateCategory(id: string, input: Partial<CategoryInput>): Promise<Category | null> {
   const payload: Record<string, string | number | boolean> = {};
@@ -30,7 +33,9 @@ export async function adminUpdateCategory(id: string, input: Partial<CategoryInp
   if (input.order !== undefined) payload.order_index = input.order;
   if (input.published !== undefined) payload.published = input.published;
   const { data, error } = await supabase.from("categories").update(payload).eq("id", id).select("*").maybeSingle();
-  if (error) throw error; return data ? mapCategory(data as unknown as CategoryRow) : null;
+  if (error) throw error;
+  invalidateCategoriesCache();
+  return data ? mapCategory(data as unknown as CategoryRow) : null;
 }
-export async function adminDeleteCategory(id: string): Promise<void> { const { error } = await supabase.from("categories").delete().eq("id", id); if (error) throw error; }
+export async function adminDeleteCategory(id: string): Promise<void> { const { error } = await supabase.from("categories").delete().eq("id", id); if (error) throw error; invalidateCategoriesCache(); }
 export async function adminTogglePublishCategory(id: string): Promise<Category | null> { const categories = await adminGetCategories(); const category = categories.find((item) => item.id === id); if (!category) return null; return adminUpdateCategory(id, { published: !category.published }); }

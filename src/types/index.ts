@@ -115,6 +115,8 @@ export interface UserProfile {
   phone: string;
   role: UserRole;
   createdAt: string;
+  referralCode?: string;
+  lastSeenAt?: string | null;
 }
 
 export type OrderStatus =

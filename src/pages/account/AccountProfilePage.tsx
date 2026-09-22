@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
 import { Button } from "@/components/ui/Button";
+import { LocationConsentCard } from "@/components/account/LocationConsentCard";
 
 export function AccountProfilePage() {
   const user = useAuthStore((s) => s.user);
@@ -28,7 +29,8 @@ export function AccountProfilePage() {
   }
 
   return (
-    <div className="max-w-lg rounded-2xl bg-fitora-charcoal p-6">
+    <div className="space-y-6">
+      <div className="max-w-lg rounded-2xl bg-fitora-charcoal p-6">
       <h2 className="mb-6 font-display text-lg font-bold">Mon profil</h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
@@ -65,6 +67,9 @@ export function AccountProfilePage() {
           {saving ? "Enregistrement..." : "Enregistrer les modifications"}
         </Button>
       </form>
+      </div>
+
+      <LocationConsentCard />
     </div>
   );
 }

@@ -1,9 +1,22 @@
+import { useI18nStore } from "@/i18n/i18nStore";
+
+// Ces fonctions lisent la langue active directement depuis le store i18n
+// plutôt que d'exiger un paramètre supplémentaire : tous les appels
+// existants dans l'application (des dizaines de fichiers) deviennent ainsi
+// automatiquement sensibles à la langue sans devoir être modifiés un par un.
+function currentIntlLocale(): string {
+  return useI18nStore.getState().language === "en" ? "en-US" : "fr-FR";
+}
+
 export function formatFCFA(amount: number): string {
-  return `${new Intl.NumberFormat("fr-FR").format(Math.round(amount))} FCFA`;
+  // FCFA reste la devise réelle de la boutique dans les deux langues — seul
+  // le séparateur de milliers change selon la langue (1 200 vs 1,200),
+  // jamais la valeur ni la devise elle-même.
+  return `${new Intl.NumberFormat(currentIntlLocale()).format(Math.round(amount))} FCFA`;
 }
 
 export function formatDate(iso: string): string {
-  return new Intl.DateTimeFormat("fr-FR", {
+  return new Intl.DateTimeFormat(currentIntlLocale(), {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -11,7 +24,7 @@ export function formatDate(iso: string): string {
 }
 
 export function formatDateTime(iso: string): string {
-  return new Intl.DateTimeFormat("fr-FR", {
+  return new Intl.DateTimeFormat(currentIntlLocale(), {
     day: "2-digit",
     month: "short",
     year: "numeric",

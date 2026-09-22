@@ -3,10 +3,10 @@ import { Upload } from "lucide-react";
 import {
   getShopSettings,
   saveShopSettings,
+  uploadHeroImage,
   DEFAULT_HERO_IMAGE,
   type ShopSettings,
 } from "@/services/settingsService";
-import { fileToDataUrl } from "@/lib/image";
 import { formatFCFA } from "@/lib/format";
 import { useToastStore } from "@/store/toastStore";
 import { Button } from "@/components/ui/Button";
@@ -19,7 +19,9 @@ export function AdminSettingsPage() {
   const pushToast = useToastStore((s) => s.push);
 
   useEffect(() => {
-    getShopSettings().then(setSettings);
+    // Toujours lire la valeur la plus fraîche ici : c'est l'écran d'édition,
+    // pas question de partir d'une copie potentiellement périmée du cache.
+    getShopSettings({ forceRefresh: true }).then(setSettings);
   }, []);
 
   if (!settings) return null;
@@ -45,8 +47,16 @@ export function AdminSettingsPage() {
     if (!file) return;
     setUploadingHero(true);
     try {
-      const dataUrl = await fileToDataUrl(file);
-      update("heroImageUrl", dataUrl);
+      // Téléversée vers Supabase Storage : seule l'URL publique (courte)
+      // est stockée dans shop_settings, jamais l'image en base64.
+      const publicUrl = await uploadHeroImage(file);
+      update("heroImageUrl", publicUrl);
+      pushToast("Image téléversée. Cliquez sur Enregistrer pour la publier.", "success");
+    } catch (error) {
+      pushToast(
+        error instanceof Error ? error.message : "Échec du téléversement de l'image.",
+        "error"
+      );
     } finally {
       setUploadingHero(false);
       if (heroFileInputRef.current) heroFileInputRef.current.value = "";
@@ -233,6 +243,154 @@ export function AdminSettingsPage() {
             rows={10}
             className="input resize-y"
           />
+        </section>
+
+        <section className="space-y-3 rounded-2xl bg-fitora-charcoal p-6">
+          <h2 className="font-display text-sm font-semibold">Réseaux sociaux</h2>
+          <p className="text-xs text-fitora-gray-dim">
+            Ces liens alimentent automatiquement les icônes du pied de page. Laissez un champ
+            vide pour masquer proprement l'icône correspondante.
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Facebook">
+              <input
+                type="url"
+                placeholder="https://facebook.com/votre-page"
+                value={settings.socialLinks.facebook ?? ""}
+                onChange={(e) =>
+                  update("socialLinks", { ...settings.socialLinks, facebook: e.target.value })
+                }
+                className="input"
+              />
+            </Field>
+            <Field label="Instagram">
+              <input
+                type="url"
+                placeholder="https://instagram.com/votre-compte"
+                value={settings.socialLinks.instagram ?? ""}
+                onChange={(e) =>
+                  update("socialLinks", { ...settings.socialLinks, instagram: e.target.value })
+                }
+                className="input"
+              />
+            </Field>
+            <Field label="TikTok">
+              <input
+                type="url"
+                placeholder="https://tiktok.com/@votre-compte"
+                value={settings.socialLinks.tiktok ?? ""}
+                onChange={(e) =>
+                  update("socialLinks", { ...settings.socialLinks, tiktok: e.target.value })
+                }
+                className="input"
+              />
+            </Field>
+            <Field label="YouTube">
+              <input
+                type="url"
+                placeholder="https://youtube.com/@votre-chaine"
+                value={settings.socialLinks.youtube ?? ""}
+                onChange={(e) =>
+                  update("socialLinks", { ...settings.socialLinks, youtube: e.target.value })
+                }
+                className="input"
+              />
+            </Field>
+            <Field label="WhatsApp (lien de discussion)">
+              <input
+                type="url"
+                placeholder="https://wa.me/2250789777767"
+                value={settings.socialLinks.whatsapp ?? ""}
+                onChange={(e) =>
+                  update("socialLinks", { ...settings.socialLinks, whatsapp: e.target.value })
+                }
+                className="input"
+              />
+            </Field>
+          </div>
+        </section>
+
+        <section className="space-y-3 rounded-2xl bg-fitora-charcoal p-6">
+          <h2 className="font-display text-sm font-semibold">Programme de parrainage</h2>
+          <p className="text-xs text-fitora-gray-dim">
+            La récompense est attribuée automatiquement et en toute sécurité (côté serveur)
+            dès qu'une commande d'un client parrainé passe au statut « Livrée ». Ce même taux
+            régit aussi la commission versée quand un client utilise le code de réduction
+            personnel d'un affilié au paiement — un seul réglage pour les deux mécanismes.
+            Le programme reste désactivé tant que vous ne l'activez pas explicitement ci-dessous.
+          </p>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={settings.affiliate.enabled}
+              onChange={(e) =>
+                update("affiliate", { ...settings.affiliate, enabled: e.target.checked })
+              }
+            />
+            Activer le programme de parrainage
+          </label>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Type de récompense">
+              <select
+                value={settings.affiliate.rewardType}
+                onChange={(e) =>
+                  update("affiliate", {
+                    ...settings.affiliate,
+                    rewardType: e.target.value as "percentage" | "fixed",
+                  })
+                }
+                className="input"
+              >
+                <option value="fixed">Montant fixe (FCFA)</option>
+                <option value="percentage">Pourcentage (%)</option>
+              </select>
+            </Field>
+            <Field
+              label={
+                settings.affiliate.rewardType === "percentage"
+                  ? "Valeur de la récompense (%)"
+                  : "Valeur de la récompense (FCFA)"
+              }
+            >
+              <input
+                type="number"
+                min={0}
+                value={settings.affiliate.rewardValue}
+                onChange={(e) =>
+                  update("affiliate", { ...settings.affiliate, rewardValue: Number(e.target.value) })
+                }
+                className="input"
+              />
+            </Field>
+            <Field label="Montant minimum de commande (FCFA)">
+              <input
+                type="number"
+                min={0}
+                value={settings.affiliate.minOrderTotal}
+                onChange={(e) =>
+                  update("affiliate", {
+                    ...settings.affiliate,
+                    minOrderTotal: Number(e.target.value),
+                  })
+                }
+                className="input"
+              />
+            </Field>
+            <Field label="Validité de la récompense (jours)">
+              <input
+                type="number"
+                min={1}
+                value={settings.affiliate.rewardExpiresDays}
+                onChange={(e) =>
+                  update("affiliate", {
+                    ...settings.affiliate,
+                    rewardExpiresDays: Number(e.target.value),
+                  })
+                }
+                className="input"
+              />
+            </Field>
+          </div>
         </section>
 
         <Button type="submit" disabled={saving}>

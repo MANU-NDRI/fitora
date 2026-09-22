@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, CheckCheck, Trash2 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
+import { useToastStore } from "@/store/toastStore";
 import {
   deleteNotification,
   getNotificationsForUser,
@@ -28,6 +29,7 @@ function timeAgo(iso: string): string {
 
 export function NotificationBell() {
   const user = useAuthStore((s) => s.user);
+  const pushToast = useToastStore((s) => s.push);
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationView[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -51,9 +53,43 @@ export function NotificationBell() {
 
     // Rafraîchit périodiquement pour refléter les statuts
     // de commande / réponses admin.
-    const interval = setInterval(refresh, 15000);
+    let interval: ReturnType<typeof setInterval> | null = null;
 
-    return () => clearInterval(interval);
+    function startPolling() {
+      if (interval) return;
+      interval = setInterval(refresh, 15000);
+    }
+
+    function stopPolling() {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    }
+
+    // On ne sonde le serveur que si l'onglet est visible : un onglet en
+    // arrière-plan n'a pas besoin de vérifier les notifications toutes les
+    // 15 secondes. Dès qu'il redevient visible, on relance immédiatement un
+    // rafraîchissement puis le polling normal.
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        refresh();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    }
+
+    if (document.visibilityState === "visible") {
+      startPolling();
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
@@ -120,6 +156,13 @@ export function NotificationBell() {
 
     if (!user || deletingId === notificationId) return;
 
+    // Suppression irréversible : on demande confirmation avant d'agir,
+    // conformément au comportement attendu pour cette action.
+    const confirmed = window.confirm(
+      "Supprimer définitivement cette notification ?"
+    );
+    if (!confirmed) return;
+
     try {
       setDeletingId(notificationId);
 
@@ -127,6 +170,15 @@ export function NotificationBell() {
       await refresh();
     } catch (error) {
       console.error("Erreur suppression notification :", error);
+      pushToast(
+        error instanceof Error
+          ? error.message
+          : "Impossible de supprimer cette notification.",
+        "error",
+      );
+      // On resynchronise avec le serveur pour être sûr que l'affichage
+      // reflète l'état réel (ex : suppression refusée par les permissions).
+      await refresh();
     } finally {
       setDeletingId(null);
     }

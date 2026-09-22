@@ -9,13 +9,82 @@ architecture prête à évoluer vers d'autres marchés.
 
 ---
 
+## État du projet (dernière mise à jour de cet audit)
+
+Cette section résume, honnêtement, ce qui a été vérifié et ce qui reste à
+faire suite au dernier audit technique complet.
+
+### ⚠️ Correctif de sécurité critique (dernier audit)
+`create_order_transaction()` faisait confiance à un montant de réduction
+fourni tel quel par le navigateur, et la consommation d'un code de réduction
+(incrémentation de `used_count`) se faisait dans un second appel séparé,
+après la création de la commande. Un client pouvait donc, en appelant l'API
+Supabase directement (hors interface), obtenir une réduction arbitraire ou
+réutiliser indéfiniment un code à usage unique. **Corrigé** : la fonction
+recalcule désormais elle-même le montant depuis `discount_codes` et
+incrémente `used_count` dans la même transaction atomique que la commande.
+Voir `supabase/phase4_affiliate_commissions_migration.sql`, section 0.
+**Cette migration doit être appliquée dès que possible.**
+
+### Fait et vérifié (TypeScript + build de production, niveau code uniquement)
+- Découpage du bundle client par route (`React.lazy`) + bundle admin déjà séparé.
+- Cache + déduplication des requêtes Supabase (paramètres boutique, produits,
+  catégories) avec invalidation câblée sur les mutations admin.
+- Pause du polling des notifications quand l'onglet est en arrière-plan.
+- Correction d'un bug réel de suppression de notification (RLS manquante).
+- Image hero : upload vers Supabase Storage au lieu d'un Base64 en base.
+- Système de parrainage (codes, liens, récompenses automatiques et sécurisées
+  côté base), géolocalisation avec consentement explicite, réseaux sociaux
+  gérés depuis l'admin, tableau de bord clients avec présence en temps réel.
+- **Correction d'un bug critique** : `adminCustomerService.ts` lisait un faux
+  magasin `localStorage` jamais alimenté par le vrai flux Supabase — la page
+  admin "Clients" n'affichait donc aucun client réel avant cette correction.
+- Système de traduction FR/EN (voir section dédiée ci-dessous).
+
+### Traduction FR/EN — couverture réelle, pas survendue
+Un vrai système i18n est en place (`src/i18n/`), fonctionnel, avec sélecteur
+de langue, persistance et bascule instantanée. **Cependant, la couverture
+n'est pas à 100 % de l'application.** Sont entièrement traduits : l'en-tête,
+le pied de page, les pages de connexion/inscription, la mise en page du
+compte client et de l'administration, la page d'accueil, les pages 404 et
+"en construction", ainsi que le formatage des dates/nombres/prix dans toute
+l'application (automatique, sans changement de code supplémentaire). **Ne
+sont pas encore traduits** : le contenu détaillé des pages Boutique, Fiche
+produit, Panier, Paiement, la totalité du contenu des pages admin (tableaux,
+formulaires), les sous-pages du compte client (commandes, favoris, adresses,
+messages, parrainage), et les messages toast/erreurs dispersés dans les
+services. Ces textes restent en français quelle que soit la langue
+sélectionnée — ils ne cassent rien, ils ne sont simplement pas encore migrés
+vers le système de traduction.
+
+### Nécessite une action manuelle de votre part dans Supabase
+Voir `supabase/phase3_features_migration.sql` et
+`supabase/phase4_affiliate_commissions_migration.sql` — ces fichiers
+contiennent **toutes** les migrations en attente (notifications, Storage,
+parrainage historique, géolocalisation, réseaux sociaux, présence, correctif
+de sécurité des codes de réduction, code de réduction persistant par
+affilié, suivi des clics, commissions avec statuts pending/validated/paid/
+cancelled, gestion admin). Rien de tout cela ne fonctionne tant que ces
+fichiers n'ont pas été exécutés dans l'éditeur SQL Supabase, **dans
+l'ordre** (phase3 avant phase4). Le fichier phase3 inclut aussi la ligne
+(commentée) pour activer Realtime sur `shop_settings`.
+
+### Non vérifié
+Aucun test live contre une instance Supabase réelle n'a été possible depuis
+l'environnement de développement utilisé pour cet audit (pas d'accès réseau
+sortant vers Supabase). Tout ce qui précède a été vérifié au niveau code
+(TypeScript, build de production) uniquement — un test manuel de bout en bout
+après application des migrations reste nécessaire.
+
+---
+
 ## Stack technique
 
 - **React 19 + TypeScript + Vite**
 - **Tailwind CSS v4** (charte graphique FITORA : noir `#0A0A0A`, vert électrique
   `#39FF14`, blanc, gris foncé `#171717`, polices Poppins/Montserrat)
 - **Framer Motion** pour les animations
-- **Zustand** pour le panier, les favoris, l'authentification, les toasts
+- **Zustand** pour le panier, les favoris, l'authentification, les toasts, la langue
 - **React Router v7**
 - **Supabase** (PostgreSQL + Auth + Storage) — voir la section _Backend_ ci-dessous
 - Hébergement cible : **Cloudflare Pages**
@@ -107,6 +176,18 @@ VITE_WHATSAPP_NUMBER=2250789777767
 2. Dans **SQL Editor**, exécutez dans l'ordre :
    - `supabase/schema.sql` — tables, types, index, triggers de réservation de
      stock, policies **Row Level Security** (voir section _Sécurité_).
+   - `supabase/migration.sql` — fonction transactionnelle sécurisée de
+     création de commande (verrouillage de stock, validation prix côté
+     serveur).
+   - `supabase/phase3_features_migration.sql` — notifications (correctif
+     RLS), Storage (image hero), parrainage, géolocalisation avec
+     consentement, réseaux sociaux, présence client. Lisez les commentaires
+     en tête de fichier avant exécution ; contient une ligne à décommenter
+     pour activer Realtime sur `shop_settings`.
+   - `supabase/phase4_affiliate_commissions_migration.sql` — **correctif de
+     sécurité critique** sur les codes de réduction (voir plus haut), code
+     de réduction persistant par affilié, suivi des clics, commissions avec
+     statuts et gestion admin. À exécuter après phase3.
    - `supabase/seed.sql` — 11 catégories + 10 produits de démonstration avec
      variantes (tailles, couleurs, pointures).
 3. Dans **Project Settings > API**, copiez `Project URL` et `anon public key`
@@ -173,14 +254,19 @@ src/
 ├── pages/            # Une page par route (Home, Shop, Product, Cart, Contact, Account/*, Admin/*)
 ├── layouts/          # MainLayout (client), AccountLayout, AdminLayout
 ├── features/         # Logique groupée par domaine (auth, admin, products, orders)
-├── services/         # Accès aux données — à remplacer par Supabase (voir tableau plus haut)
+├── services/         # Accès aux données Supabase (produits, commandes, parrainage, position...)
 ├── store/            # Zustand : panier, favoris, auth, toasts
+├── i18n/             # Système de traduction FR/EN (store + locales/fr.json, en.json)
+├── hooks/            # Hooks partagés (ex. usePresenceHeartbeat)
 ├── types/            # Types TypeScript du domaine (Product, Order, Category, ...)
-├── lib/              # Formatage FCFA/dates, client Supabase, liens WhatsApp
+├── lib/              # Formatage FCFA/dates (sensible à la langue), client Supabase, liens WhatsApp
 └── styles/           # Thème Tailwind (charte FITORA)
 supabase/
-├── schema.sql        # Tables, types, RLS, triggers
-└── seed.sql          # Données de démonstration
+├── schema.sql                      # Tables, types, RLS, triggers de base
+├── migration.sql                   # Fonction transactionnelle de commande sécurisée
+├── phase3_features_migration.sql   # Notifications, Storage, parrainage, géoloc, réseaux sociaux, présence
+├── phase4_affiliate_commissions_migration.sql  # Correctif sécurité codes promo + commissions affiliés
+└── seed.sql                        # Données de démonstration
 ```
 
 ---

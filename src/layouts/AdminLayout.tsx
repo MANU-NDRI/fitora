@@ -9,27 +9,35 @@ import {
   MessageSquare,
   Megaphone,
   Tag,
+  Percent,
   Settings,
   LogOut,
   ExternalLink,
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
+import { useTranslation } from "@/i18n/i18nStore";
 import { cn } from "@/lib/cn";
 
-const LINKS = [
-  { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/admin/products", label: "Produits", icon: Package },
-  { to: "/admin/categories", label: "Catégories", icon: Tags },
-  { to: "/admin/orders", label: "Commandes", icon: ShoppingCart },
-  { to: "/admin/inventory", label: "Stock", icon: Boxes },
-  { to: "/admin/customers", label: "Clients", icon: Users },
-  { to: "/admin/discount-codes", label: "Codes promo", icon: Tag },
-  { to: "/admin/messages", label: "Messages", icon: MessageSquare },
-  { to: "/admin/notifications", label: "Notifications", icon: Megaphone },
-  { to: "/admin/settings", label: "Paramètres", icon: Settings },
-];
+function useAdminLinks() {
+  const { t } = useTranslation();
+  return [
+    { to: "/admin/dashboard", label: t("admin.dashboard"), icon: LayoutDashboard },
+    { to: "/admin/products", label: t("admin.products"), icon: Package },
+    { to: "/admin/categories", label: t("admin.categories"), icon: Tags },
+    { to: "/admin/orders", label: t("admin.orders"), icon: ShoppingCart },
+    { to: "/admin/inventory", label: t("admin.inventory"), icon: Boxes },
+    { to: "/admin/customers", label: t("admin.customers"), icon: Users },
+    { to: "/admin/discount-codes", label: t("admin.discountCodes"), icon: Tag },
+    { to: "/admin/messages", label: t("admin.messages"), icon: MessageSquare },
+    { to: "/admin/notifications", label: t("admin.notifications"), icon: Megaphone },
+    { to: "/admin/affiliates", label: t("admin.affiliates"), icon: Percent },
+    { to: "/admin/settings", label: t("admin.settings"), icon: Settings },
+  ];
+}
 
 export function AdminLayout() {
+  const { t } = useTranslation();
+  const LINKS = useAdminLinks();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
@@ -76,20 +84,20 @@ export function AdminLayout() {
             rel="noopener noreferrer"
             className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-fitora-gray hover:bg-white/5 hover:text-fitora-white"
           >
-            <ExternalLink size={16} /> Voir la boutique
+            <ExternalLink size={16} /> {t("admin.viewShop")}
           </a>
           <button
             onClick={handleLogout}
             className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-fitora-gray hover:bg-red-500/10 hover:text-red-400"
           >
-            <LogOut size={16} /> Déconnexion
+            <LogOut size={16} /> {t("nav.logout")}
           </button>
         </div>
       </aside>
 
       <div className="flex-1">
         <header className="flex h-16 items-center justify-between border-b border-fitora-border px-4 md:px-8">
-          <p className="font-display text-sm font-semibold md:text-base">Espace administrateur</p>
+          <p className="font-display text-sm font-semibold md:text-base">{t("admin.title")}</p>
           <p className="text-sm text-fitora-gray">{user?.firstName} {user?.lastName}</p>
         </header>
         <main className="p-4 md:p-8">

@@ -13,7 +13,7 @@ import {
 } from "@/services/settingsService";
 import { createOrder } from "@/services/orderService";
 import { getProductsByIds } from "@/services/productService";
-import { validateDiscountCode, redeemDiscountCode, type DiscountValidationResult } from "@/services/discountService";
+import { validateDiscountCode, type DiscountValidationResult } from "@/services/discountService";
 import { formatFCFA } from "@/lib/format";
 import { buildWhatsAppLink, whatsappOrderMessage } from "@/lib/whatsapp";
 import { Button } from "@/components/ui/Button";
@@ -190,9 +190,12 @@ export function CheckoutPage() {
         note: form.note || undefined,
       });
 
-      if (promoResult?.valid && promoResult.code) {
-        await redeemDiscountCode(promoResult.code.id);
-      }
+      // La validation et la consommation du code (incrémentation de
+      // used_count) sont désormais effectuées de façon atomique, côté
+      // serveur, à l'intérieur de create_order_transaction — voir la
+      // migration Phase 4. Un second appel de "consommation" ici
+      // consommerait le code une deuxième fois pour rien : il ne faut plus
+      // l'appeler.
 
       clearCart();
       setConfirmedOrder(order);

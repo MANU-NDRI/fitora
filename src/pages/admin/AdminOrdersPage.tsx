@@ -18,15 +18,21 @@ export function AdminOrdersPage() {
   const [selected, setSelected] = useState<Order | null>(null);
   const pushToast = useToastStore((s) => s.push);
 
-  async function refresh() {
+ 
+async function refresh() {
+  try {
     const list = await adminGetAllOrders();
+
     setOrders(list);
+
     if (selected) {
       const updated = list.find((o) => o.id === selected.id) ?? null;
       setSelected(updated);
     }
+  } catch (error) {
+    console.error("Erreur chargement commandes admin :", error);
   }
-
+}
   useEffect(() => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps

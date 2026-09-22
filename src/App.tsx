@@ -1,35 +1,47 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { MainLayout } from "@/layouts/MainLayout";
 import { AccountLayout } from "@/layouts/AccountLayout";
 import { RequireAuth } from "@/features/auth/RequireAuth";
 import { RequireAdmin } from "@/features/admin/RequireAdmin";
+import { usePresenceHeartbeat } from "@/hooks/usePresenceHeartbeat";
+import { useEffect } from "react";
+import { captureReferralCodeFromUrl } from "@/services/affiliateService";
 
+// La page d'accueil reste chargée immédiatement : c'est la première page vue
+// par la quasi-totalité des visiteurs, inutile de payer un aller-retour réseau
+// supplémentaire pour l'afficher.
 import { HomePage } from "@/pages/HomePage";
-import { ShopPage } from "@/pages/ShopPage";
-import { ProductPage } from "@/pages/ProductPage";
-import { CartPage } from "@/pages/CartPage";
-import { CategoriesPage } from "@/pages/CategoriesPage";
-import { CategoryRedirectPage } from "@/pages/CategoryRedirectPage";
-import { PromotionsRedirectPage } from "@/pages/PromotionsRedirectPage";
-import { NewArrivalsRedirectPage } from "@/pages/NewArrivalsRedirectPage";
-import { ContactPage } from "@/pages/ContactPage";
-import { ReturnPolicyPage } from "@/pages/ReturnPolicyPage";
-import { LoginPage } from "@/pages/LoginPage";
-import { RegisterPage } from "@/pages/RegisterPage";
-import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
-import { ResetPasswordPage } from "@/pages/ResetPasswordPage";
-import { CheckoutPage } from "@/pages/CheckoutPage";
-import { ComingSoonPage } from "@/pages/ComingSoonPage";
-import { NotFoundPage } from "@/pages/NotFoundPage";
 
-import { AccountOverviewPage } from "@/pages/account/AccountOverviewPage";
-import { AccountOrdersPage } from "@/pages/account/AccountOrdersPage";
-import { AccountOrderDetailPage } from "@/pages/account/AccountOrderDetailPage";
-import { AccountFavoritesPage } from "@/pages/account/AccountFavoritesPage";
-import { AccountProfilePage } from "@/pages/account/AccountProfilePage";
-import { AccountAddressesPage } from "@/pages/account/AccountAddressesPage";
-import { AccountMessagesPage } from "@/pages/account/AccountMessagesPage";
+// Toutes les autres pages boutique/compte sont chargées à la demande
+// (code-splitting) : elles ne pèsent plus sur le bundle initial téléchargé
+// par chaque visiteur, qui ne consulte jamais la totalité des pages.
+const ShopPage = lazy(() => import("@/pages/ShopPage").then((m) => ({ default: m.ShopPage })));
+const ProductPage = lazy(() => import("@/pages/ProductPage").then((m) => ({ default: m.ProductPage })));
+const CartPage = lazy(() => import("@/pages/CartPage").then((m) => ({ default: m.CartPage })));
+const CategoriesPage = lazy(() => import("@/pages/CategoriesPage").then((m) => ({ default: m.CategoriesPage })));
+const CategoryRedirectPage = lazy(() => import("@/pages/CategoryRedirectPage").then((m) => ({ default: m.CategoryRedirectPage })));
+const PromotionsRedirectPage = lazy(() => import("@/pages/PromotionsRedirectPage").then((m) => ({ default: m.PromotionsRedirectPage })));
+const NewArrivalsRedirectPage = lazy(() => import("@/pages/NewArrivalsRedirectPage").then((m) => ({ default: m.NewArrivalsRedirectPage })));
+const ContactPage = lazy(() => import("@/pages/ContactPage").then((m) => ({ default: m.ContactPage })));
+const ReturnPolicyPage = lazy(() => import("@/pages/ReturnPolicyPage").then((m) => ({ default: m.ReturnPolicyPage })));
+const LoginPage = lazy(() => import("@/pages/LoginPage").then((m) => ({ default: m.LoginPage })));
+const RegisterPage = lazy(() => import("@/pages/RegisterPage").then((m) => ({ default: m.RegisterPage })));
+const ForgotPasswordPage = lazy(() => import("@/pages/ForgotPasswordPage").then((m) => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import("@/pages/ResetPasswordPage").then((m) => ({ default: m.ResetPasswordPage })));
+const CheckoutPage = lazy(() => import("@/pages/CheckoutPage").then((m) => ({ default: m.CheckoutPage })));
+const ComingSoonPage = lazy(() => import("@/pages/ComingSoonPage").then((m) => ({ default: m.ComingSoonPage })));
+const NotFoundPage = lazy(() => import("@/pages/NotFoundPage").then((m) => ({ default: m.NotFoundPage })));
+
+const AccountOverviewPage = lazy(() => import("@/pages/account/AccountOverviewPage").then((m) => ({ default: m.AccountOverviewPage })));
+const AccountOrdersPage = lazy(() => import("@/pages/account/AccountOrdersPage").then((m) => ({ default: m.AccountOrdersPage })));
+const AccountOrderDetailPage = lazy(() => import("@/pages/account/AccountOrderDetailPage").then((m) => ({ default: m.AccountOrderDetailPage })));
+const AccountFavoritesPage = lazy(() => import("@/pages/account/AccountFavoritesPage").then((m) => ({ default: m.AccountFavoritesPage })));
+const AccountProfilePage = lazy(() => import("@/pages/account/AccountProfilePage").then((m) => ({ default: m.AccountProfilePage })));
+const AccountAddressesPage = lazy(() => import("@/pages/account/AccountAddressesPage").then((m) => ({ default: m.AccountAddressesPage })));
+const AccountMessagesPage = lazy(() => import("@/pages/account/AccountMessagesPage").then((m) => ({ default: m.AccountMessagesPage })));
+const AccountAffiliatePage = lazy(() => import("@/pages/account/AccountAffiliatePage").then((m) => ({ default: m.AccountAffiliatePage })));
 
 // L'espace administrateur est chargé à la demande (code-splitting) : il ne
 // pèse pas sur le temps de chargement initial de la boutique cliente.
@@ -44,6 +56,7 @@ const AdminCustomersPage = lazy(() => import("@/pages/admin/AdminCustomersPage")
 const AdminDiscountCodesPage = lazy(() => import("@/pages/admin/AdminDiscountCodesPage").then((m) => ({ default: m.AdminDiscountCodesPage })));
 const AdminMessagesPage = lazy(() => import("@/pages/admin/AdminMessagesPage").then((m) => ({ default: m.AdminMessagesPage })));
 const AdminNotificationsPage = lazy(() => import("@/pages/admin/AdminNotificationsPage").then((m) => ({ default: m.AdminNotificationsPage })));
+const AdminAffiliatesPage = lazy(() => import("@/pages/admin/AdminAffiliatesPage").then((m) => ({ default: m.AdminAffiliatesPage })));
 const AdminSettingsPage = lazy(() => import("@/pages/admin/AdminSettingsPage").then((m) => ({ default: m.AdminSettingsPage })));
 
 function AdminFallback() {
@@ -54,9 +67,35 @@ function AdminFallback() {
   );
 }
 
+// Fallback discret pour les pages boutique/compte chargées à la demande.
+// Volontairement minimaliste (pas de logo ni de mise en page) afin de
+// s'afficher instantanément sans provoquer de saut de mise en page notable :
+// sur un réseau rapide, ce fallback n'est visible que quelques dizaines de ms.
+function PageFallback() {
+  return (
+    <div
+      className="flex min-h-[60vh] items-center justify-center text-fitora-gray"
+      role="status"
+      aria-label="Chargement de la page"
+    >
+      <Loader2 className="h-6 w-6 animate-spin" />
+    </div>
+  );
+}
+
 export function App() {
+  usePresenceHeartbeat();
+
+  // Capture ?ref=CODE dès l'arrivée sur le site, quelle que soit la page
+  // d'atterrissage (accueil, produit partagé, etc.), avant même que le
+  // visiteur atteigne le formulaire d'inscription.
+  useEffect(() => {
+    captureReferralCodeFromUrl();
+  }, []);
+
   return (
     <BrowserRouter>
+      <Suspense fallback={<PageFallback />}>
       <Routes>
         {/* Espace public + client */}
         <Route element={<MainLayout />}>
@@ -86,6 +125,7 @@ export function App() {
               <Route path="/compte/profil" element={<AccountProfilePage />} />
               <Route path="/compte/adresses" element={<AccountAddressesPage />} />
               <Route path="/compte/messages" element={<AccountMessagesPage />} />
+              <Route path="/compte/affiliation" element={<AccountAffiliatePage />} />
             </Route>
           </Route>
 
@@ -125,10 +165,12 @@ export function App() {
             <Route path="/admin/discount-codes" element={<AdminDiscountCodesPage />} />
             <Route path="/admin/messages" element={<AdminMessagesPage />} />
             <Route path="/admin/notifications" element={<AdminNotificationsPage />} />
+            <Route path="/admin/affiliates" element={<AdminAffiliatesPage />} />
             <Route path="/admin/settings" element={<AdminSettingsPage />} />
           </Route>
         </Route>
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

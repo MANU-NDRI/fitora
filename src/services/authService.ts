@@ -85,6 +85,7 @@ export async function signUp(input: {
   email: string;
   phone: string;
   password: string;
+  referralCode?: string;
 }): Promise<SignUpResult> {
   const { data, error } = await supabase.auth.signUp({
     email: input.email,
@@ -94,6 +95,10 @@ export async function signUp(input: {
         first_name: input.firstName,
         last_name: input.lastName,
         phone: input.phone,
+        // Lu côté serveur par le trigger handle_new_user() pour attribuer le
+        // parrain — un code invalide ou inconnu est simplement ignoré, ça ne
+        // bloque jamais l'inscription (voir la migration Phase 3).
+        referral_code: input.referralCode || undefined,
       },
     },
   });

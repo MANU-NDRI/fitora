@@ -3,10 +3,13 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { UserPlus, MailCheck } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
+import { useTranslation } from "@/i18n/i18nStore";
 import { Button } from "@/components/ui/Button";
 import { AuthError } from "@/services/authService";
+import { getStoredReferralCode, clearStoredReferralCode } from "@/services/affiliateService";
 
 export function RegisterPage() {
+  const { t } = useTranslation();
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -36,32 +39,36 @@ export function RegisterPage() {
     setError(null);
 
     if (!form.firstName || !form.lastName || !form.email || !form.phone || !form.password) {
-      setError("Merci de remplir tous les champs.");
+      setError(t("auth.fillAllFields"));
       return;
     }
     if (form.password.length < 6) {
-      setError("Le mot de passe doit contenir au moins 6 caractères.");
+      setError(t("auth.passwordTooShort"));
       return;
     }
     if (form.password !== form.confirmPassword) {
-      setError("Les mots de passe ne correspondent pas.");
+      setError(t("auth.passwordsDontMatch"));
       return;
     }
 
     setSubmitting(true);
     try {
-      const { needsEmailConfirmation } = await register(form);
+      const { needsEmailConfirmation } = await register({
+        ...form,
+        referralCode: getStoredReferralCode() || undefined,
+      });
       if (needsEmailConfirmation) {
         // Pas de session encore : on ne redirige pas vers une page protégée,
         // on invite plutôt à confirmer l'email d'abord.
         setAwaitingConfirmation(true);
       } else {
-        pushToast("Compte créé", "success");
+        pushToast(t("auth.accountCreated"), "success");
+        clearStoredReferralCode();
         navigate(redirectTo, { replace: true });
       }
     } catch (e) {
       if (e instanceof AuthError) setError(e.message);
-      else setError("Une erreur est survenue. Réessayez.");
+      else setError(t("auth.genericError"));
     } finally {
       setSubmitting(false);
     }
@@ -76,15 +83,13 @@ export function RegisterPage() {
           </span>
           <div className="mt-6 flex flex-col items-center gap-3 rounded-2xl border border-fitora-green/30 bg-fitora-green/5 p-6">
             <MailCheck size={32} className="text-fitora-green" />
-            <h1 className="font-display text-lg font-bold">Vérifiez votre email</h1>
+            <h1 className="font-display text-lg font-bold">{t("auth.checkEmailTitle")}</h1>
             <p className="text-sm text-fitora-gray">
-              Un lien de confirmation vient d'être envoyé à{" "}
-              <strong className="text-fitora-white">{form.email}</strong>. Cliquez dessus pour
-              activer votre compte, puis connectez-vous.
+              {t("auth.checkEmailMessage", { email: form.email })}
             </p>
           </div>
           <Link to="/login" className="mt-6 block text-sm text-fitora-gray hover:text-fitora-green">
-            ← Retour à la connexion
+            {t("auth.backToLogin")}
           </Link>
         </div>
       </div>
@@ -98,16 +103,14 @@ export function RegisterPage() {
           <span className="font-display text-3xl font-extrabold tracking-tight">
             FIT<span className="text-fitora-green">ORA</span>
           </span>
-          <h1 className="mt-4 font-display text-xl font-bold">Créer un compte</h1>
-          <p className="mt-1 text-sm text-fitora-gray">
-            Un compte est nécessaire pour passer commande sur FITORA.
-          </p>
+          <h1 className="mt-4 font-display text-xl font-bold">{t("auth.registerTitle")}</h1>
+          <p className="mt-1 text-sm text-fitora-gray">{t("auth.registerSubtitle")}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-fitora-gray">Prénom</span>
+              <span className="mb-1.5 block text-sm font-medium text-fitora-gray">{t("auth.firstName")}</span>
               <input
                 value={form.firstName}
                 onChange={(e) => update("firstName", e.target.value)}
@@ -115,7 +118,7 @@ export function RegisterPage() {
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-fitora-gray">Nom</span>
+              <span className="mb-1.5 block text-sm font-medium text-fitora-gray">{t("auth.lastName")}</span>
               <input
                 value={form.lastName}
                 onChange={(e) => update("lastName", e.target.value)}
@@ -124,27 +127,27 @@ export function RegisterPage() {
             </label>
           </div>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-fitora-gray">Email</span>
+            <span className="mb-1.5 block text-sm font-medium text-fitora-gray">{t("auth.email")}</span>
             <input
               type="email"
               value={form.email}
               onChange={(e) => update("email", e.target.value)}
               className="input"
-              placeholder="vous@email.com"
+              placeholder={t("auth.emailPlaceholder")}
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-fitora-gray">Téléphone</span>
+            <span className="mb-1.5 block text-sm font-medium text-fitora-gray">{t("auth.phone")}</span>
             <input
               value={form.phone}
               onChange={(e) => update("phone", e.target.value)}
               className="input"
-              placeholder="07 00 00 00 00"
+              placeholder={t("auth.phonePlaceholder")}
             />
           </label>
           <div className="grid grid-cols-2 gap-4">
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-fitora-gray">Mot de passe</span>
+              <span className="mb-1.5 block text-sm font-medium text-fitora-gray">{t("auth.password")}</span>
               <input
                 type="password"
                 value={form.password}
@@ -154,7 +157,7 @@ export function RegisterPage() {
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-sm font-medium text-fitora-gray">Confirmation</span>
+              <span className="mb-1.5 block text-sm font-medium text-fitora-gray">{t("auth.confirmation")}</span>
               <input
                 type="password"
                 value={form.confirmPassword}
@@ -168,14 +171,14 @@ export function RegisterPage() {
           {error && <p className="text-sm text-red-400">{error}</p>}
 
           <Button type="submit" size="lg" className="w-full" disabled={submitting}>
-            {submitting ? "Création..." : <><UserPlus size={16} /> Créer mon compte</>}
+            {submitting ? t("auth.creatingAccount") : <><UserPlus size={16} /> {t("auth.registerButton")}</>}
           </Button>
         </form>
 
         <p className="mt-6 text-center text-sm text-fitora-gray">
-          Déjà un compte ?{" "}
+          {t("auth.hasAccount")}{" "}
           <Link to="/login" className="font-semibold text-fitora-green hover:underline">
-            Se connecter
+            {t("auth.loginButton")}
           </Link>
         </p>
       </div>

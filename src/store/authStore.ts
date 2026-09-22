@@ -12,6 +12,7 @@ interface AuthState {
     email: string;
     phone: string;
     password: string;
+    referralCode?: string;
   }) => Promise<{ needsEmailConfirmation: boolean }>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;

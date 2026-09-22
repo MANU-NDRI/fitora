@@ -1,18 +1,25 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { User, Package, Heart, MapPin, MessageSquare, LogOut } from "lucide-react";
+import { User, Package, Heart, MapPin, MessageSquare, LogOut, Gift } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useToastStore } from "@/store/toastStore";
+import { useTranslation } from "@/i18n/i18nStore";
 import { cn } from "@/lib/cn";
 
-const LINKS = [
-  { to: "/compte", label: "Vue d'ensemble", icon: User, end: true },
-  { to: "/compte/commandes", label: "Mes commandes", icon: Package },
-  { to: "/compte/favoris", label: "Mes favoris", icon: Heart },
-  { to: "/compte/adresses", label: "Mes adresses", icon: MapPin },
-  { to: "/compte/messages", label: "Mes messages", icon: MessageSquare },
-];
+function useAccountLinks() {
+  const { t } = useTranslation();
+  return [
+    { to: "/compte", label: t("account.overview"), icon: User, end: true },
+    { to: "/compte/commandes", label: t("account.orders"), icon: Package },
+    { to: "/compte/favoris", label: t("account.favorites"), icon: Heart },
+    { to: "/compte/adresses", label: t("account.addresses"), icon: MapPin },
+    { to: "/compte/messages", label: t("account.messages"), icon: MessageSquare },
+    { to: "/compte/affiliation", label: t("account.affiliate"), icon: Gift },
+  ];
+}
 
 export function AccountLayout() {
+  const { t } = useTranslation();
+  const LINKS = useAccountLinks();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const pushToast = useToastStore((s) => s.push);
@@ -20,16 +27,16 @@ export function AccountLayout() {
 
   function handleLogout() {
     logout();
-    pushToast("Vous êtes déconnecté(e)", "info");
+    pushToast(t("auth.loggedOut"), "info");
     navigate("/");
   }
 
   return (
     <div className="container-fitora py-8 md:py-12">
       <div className="mb-8">
-        <p className="text-xs uppercase tracking-wide text-fitora-gray">Mon compte</p>
+        <p className="text-xs uppercase tracking-wide text-fitora-gray">{t("nav.account")}</p>
         <h1 className="font-display text-2xl font-bold md:text-3xl">
-          Bonjour {user?.firstName} 👋
+          {t("account.greeting")} {user?.firstName} 👋
         </h1>
       </div>
 
@@ -58,7 +65,7 @@ export function AccountLayout() {
             className="flex flex-shrink-0 items-center gap-2.5 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium text-fitora-gray transition-colors hover:bg-red-500/10 hover:text-red-400 md:whitespace-normal"
           >
             <LogOut size={16} />
-            Déconnexion
+            {t("nav.logout")}
           </button>
         </aside>
 

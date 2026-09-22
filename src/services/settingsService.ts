@@ -2,6 +2,22 @@ import type { PaymentMethod } from "@/types";
 import { FITORA_WHATSAPP_NUMBER } from "@/lib/whatsapp";
 import { supabase } from "@/lib/supabase";
 
+export interface SocialLinks {
+  facebook?: string;
+  instagram?: string;
+  tiktok?: string;
+  youtube?: string;
+  whatsapp?: string;
+}
+
+export interface AffiliateSettings {
+  enabled: boolean;
+  rewardType: "percentage" | "fixed";
+  rewardValue: number;
+  minOrderTotal: number;
+  rewardExpiresDays: number;
+}
+
 export interface ShopSettings {
   shopName: string;
   slogan: string;
@@ -17,10 +33,50 @@ export interface ShopSettings {
   expressSurchargeRate: number;
   heroImageUrl?: string;
   returnPolicy: string;
+  socialLinks: SocialLinks;
+  affiliate: AffiliateSettings;
 }
 
 export const DEFAULT_HERO_IMAGE =
   "https://picsum.photos/seed/fitora-hero/1600/1200";
+
+// Bucket Supabase Storage dédié aux visuels de la boutique (hors photos
+// produits, qui restent gérées séparément). Doit être créé une seule fois
+// côté Supabase — voir la migration fournie dans le rapport d'audit.
+const HERO_IMAGE_BUCKET = "shop-assets";
+
+/**
+ * Téléverse la nouvelle image hero vers Supabase Storage et retourne son URL
+ * publique (courte, quelques dizaines de caractères) à enregistrer dans
+ * shop_settings.hero_image_url — jamais l'image elle-même en base64, qui
+ * alourdirait chaque lecture de la table pour tous les visiteurs.
+ *
+ * Un nom de fichier horodaté est utilisé à chaque téléversement : l'URL
+ * change donc à chaque changement d'image, ce qui évite tout problème de
+ * cache navigateur/CDN sur l'ancienne image.
+ */
+export async function uploadHeroImage(file: File): Promise<string> {
+  const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const path = `hero/hero-${Date.now()}.${extension}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(HERO_IMAGE_BUCKET)
+    .upload(path, file, {
+      cacheControl: "31536000",
+      upsert: false,
+      contentType: file.type || undefined,
+    });
+
+  if (uploadError) {
+    throw new Error(
+      `Échec du téléversement vers Supabase Storage (bucket "${HERO_IMAGE_BUCKET}") : ${uploadError.message}. ` +
+        `Vérifiez que ce bucket existe et autorise l'écriture pour les administrateurs (voir la migration fournie dans le rapport).`
+    );
+  }
+
+  const { data } = supabase.storage.from(HERO_IMAGE_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
 
 export const DEFAULT_RETURN_POLICY = `Vous disposez de 7 jours après réception de votre commande pour demander un retour ou un échange, à condition que l'article soit inutilisé, dans son emballage d'origine et accompagné de la preuve d'achat.
 
@@ -50,6 +106,14 @@ const DEFAULT_SETTINGS: ShopSettings = {
   expressSurchargeRate: 2,
   heroImageUrl: undefined,
   returnPolicy: DEFAULT_RETURN_POLICY,
+  socialLinks: {},
+  affiliate: {
+    enabled: false,
+    rewardType: "fixed",
+    rewardValue: 0,
+    minOrderTotal: 0,
+    rewardExpiresDays: 30,
+  },
 };
 
 function mapDatabaseSettings(row: any): ShopSettings {
@@ -84,33 +148,128 @@ function mapDatabaseSettings(row: any): ShopSettings {
     heroImageUrl: row.hero_image_url ?? undefined,
     returnPolicy:
       row.return_policy ?? DEFAULT_SETTINGS.returnPolicy,
+    socialLinks: {
+      ...DEFAULT_SETTINGS.socialLinks,
+      ...(row.social_links ?? {}),
+    },
+    affiliate: {
+      enabled: row.affiliate_enabled ?? DEFAULT_SETTINGS.affiliate.enabled,
+      rewardType: row.affiliate_reward_type ?? DEFAULT_SETTINGS.affiliate.rewardType,
+      rewardValue: Number(row.affiliate_reward_value ?? DEFAULT_SETTINGS.affiliate.rewardValue),
+      minOrderTotal: Number(row.affiliate_min_order_total ?? DEFAULT_SETTINGS.affiliate.minOrderTotal),
+      rewardExpiresDays: Number(row.affiliate_reward_expires_days ?? DEFAULT_SETTINGS.affiliate.rewardExpiresDays),
+    },
   };
 }
 
-export async function getShopSettings(): Promise<ShopSettings> {
-  try {
-    const { data, error } = await supabase
-      .from("shop_settings")
-      .select(
-        "id, shop_name, slogan, whatsapp, phone, email, address, delivery_fee, cod_enabled, standard_delivery_days, express_delivery_days, express_surcharge_rate, hero_image_url, return_policy, payment_numbers"
-      )
-      .eq("id", 1)
-      .maybeSingle();
+let cachedSettings: ShopSettings | null = null;
+let inFlightRequest: Promise<ShopSettings> | null = null;
+const subscribers = new Set<(settings: ShopSettings) => void>();
+let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 
-    if (error) {
-      console.error("Erreur récupération paramètres FITORA :", error);
-      return DEFAULT_SETTINGS;
-    }
+function notifySubscribers(settings: ShopSettings) {
+  cachedSettings = settings;
+  subscribers.forEach((fn) => fn(settings));
+}
 
-    if (!data) {
-      return DEFAULT_SETTINGS;
-    }
+/**
+ * Ouvre (une seule fois, quel que soit le nombre d'appelants) un canal
+ * Supabase Realtime sur la ligne unique de shop_settings. Dès qu'un
+ * administrateur enregistre une modification (ex : nouvelle image hero),
+ * chaque onglet client déjà ouvert reçoit la mise à jour et rafraîchit son
+ * cache sans recharger la page ni refaire de requête.
+ *
+ * Nécessite que la table soit ajoutée à la publication realtime côté
+ * Supabase : alter publication supabase_realtime add table public.shop_settings;
+ * Si ce n'est pas fait, cette fonction ne casse rien : elle échoue
+ * silencieusement et l'appli continue de fonctionner avec le cache normal
+ * (rafraîchi à chaque nouvelle navigation/mount), simplement sans la
+ * synchronisation instantanée entre onglets déjà ouverts.
+ */
+function ensureRealtimeSubscription() {
+  if (realtimeChannel) return;
 
-    return mapDatabaseSettings(data);
-  } catch (error) {
-    console.error("Erreur récupération paramètres FITORA :", error);
-    return DEFAULT_SETTINGS;
+  realtimeChannel = supabase
+    .channel("shop_settings_changes")
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "shop_settings", filter: "id=eq.1" },
+      (payload) => {
+        if (payload.new) {
+          notifySubscribers(mapDatabaseSettings(payload.new));
+        }
+      }
+    )
+    .subscribe();
+}
+
+/**
+ * S'abonne aux changements des paramètres boutique (ex : hero image mise à
+ * jour par l'administrateur). Le callback est appelé immédiatement avec la
+ * dernière valeur connue (cache ou fetch), puis à chaque mise à jour reçue
+ * via Realtime. Retourne une fonction de désabonnement à appeler dans le
+ * cleanup du useEffect appelant.
+ */
+export function subscribeToShopSettings(
+  onChange: (settings: ShopSettings) => void
+): () => void {
+  subscribers.add(onChange);
+  ensureRealtimeSubscription();
+
+  if (cachedSettings) {
+    onChange(cachedSettings);
+  } else {
+    getShopSettings().then(onChange);
   }
+
+  return () => {
+    subscribers.delete(onChange);
+  };
+}
+
+export async function getShopSettings(options?: { forceRefresh?: boolean }): Promise<ShopSettings> {
+  if (!options?.forceRefresh && cachedSettings) {
+    return cachedSettings;
+  }
+
+  // Plusieurs composants peuvent demander les paramètres au même instant
+  // (Header, Footer, HomePage...) : on ne déclenche qu'une seule requête
+  // Supabase et tout le monde attend la même promesse.
+  if (!options?.forceRefresh && inFlightRequest) {
+    return inFlightRequest;
+  }
+
+  inFlightRequest = (async () => {
+    try {
+      const { data, error } = await supabase
+        .from("shop_settings")
+        .select(
+          "id, shop_name, slogan, whatsapp, phone, email, address, delivery_fee, cod_enabled, standard_delivery_days, express_delivery_days, express_surcharge_rate, hero_image_url, return_policy, payment_numbers, social_links, affiliate_enabled, affiliate_reward_type, affiliate_reward_value, affiliate_min_order_total, affiliate_reward_expires_days"
+        )
+        .eq("id", 1)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Erreur récupération paramètres FITORA :", error);
+        return cachedSettings ?? DEFAULT_SETTINGS;
+      }
+
+      if (!data) {
+        return cachedSettings ?? DEFAULT_SETTINGS;
+      }
+
+      const settings = mapDatabaseSettings(data);
+      cachedSettings = settings;
+      return settings;
+    } catch (error) {
+      console.error("Erreur récupération paramètres FITORA :", error);
+      return cachedSettings ?? DEFAULT_SETTINGS;
+    } finally {
+      inFlightRequest = null;
+    }
+  })();
+
+  return inFlightRequest;
 }
 
 export async function saveShopSettings(
@@ -132,15 +291,22 @@ export async function saveShopSettings(
     hero_image_url: settings.heroImageUrl || null,
     return_policy: settings.returnPolicy,
     payment_numbers: settings.paymentNumbers,
+    social_links: settings.socialLinks,
+    affiliate_enabled: settings.affiliate.enabled,
+    affiliate_reward_type: settings.affiliate.rewardType,
+    affiliate_reward_value: settings.affiliate.rewardValue,
+    affiliate_min_order_total: settings.affiliate.minOrderTotal,
+    affiliate_reward_expires_days: settings.affiliate.rewardExpiresDays,
   };
 
-  const { data, error } = await supabase
-    .from("shop_settings")
-    .upsert(payload, { onConflict: "id" })
-    .select(
-      "id, shop_name, slogan, whatsapp, phone, email, address, delivery_fee, cod_enabled, standard_delivery_days, express_delivery_days, express_surcharge_rate, hero_image_url, return_policy, payment_numbers"
-    )
-    .single();
+const { data, error } = await supabase
+  .from("shop_settings")
+  .update(payload)
+  .eq("id", 1)
+  .select(
+    "id, shop_name, slogan, whatsapp, phone, email, address, delivery_fee, cod_enabled, standard_delivery_days, express_delivery_days, express_surcharge_rate, hero_image_url, return_policy, payment_numbers, social_links, affiliate_enabled, affiliate_reward_type, affiliate_reward_value, affiliate_min_order_total, affiliate_reward_expires_days"
+  )
+  .single();
 
   if (error) {
     console.error("Erreur sauvegarde paramètres FITORA :", error);
@@ -149,7 +315,12 @@ export async function saveShopSettings(
     );
   }
 
-  return mapDatabaseSettings(data);
+  const updated = mapDatabaseSettings(data);
+  // Rafraîchit immédiatement le cache local (l'admin voit son propre
+  // changement sans attendre l'aller-retour Realtime), les autres onglets
+  // seront notifiés par l'abonnement postgres_changes ci-dessus.
+  notifySubscribers(updated);
+  return updated;
 }
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {

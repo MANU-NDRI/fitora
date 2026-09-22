@@ -6,18 +6,25 @@ import { Search, Heart, ShoppingBag, User, Menu, X } from "lucide-react";
 import { useCartCount, useCartStore } from "@/store/cartStore";
 import { useFavoritesStore } from "@/store/favoritesStore";
 import { NotificationBell } from "@/components/shared/NotificationBell";
+import { LanguageSwitcher } from "@/components/shared/LanguageSwitcher";
+import { useTranslation } from "@/i18n/i18nStore";
 import { cn } from "@/lib/cn";
 
-const NAV_LINKS = [
-  { label: "Accueil", to: "/" },
-  { label: "Boutique", to: "/boutique" },
-  { label: "Catégories", to: "/categories" },
-  { label: "Promotions", to: "/promotions" },
-  { label: "Nouveautés", to: "/nouveautes" },
-  { label: "Contact", to: "/contact" },
-];
+function useNavLinks() {
+  const { t } = useTranslation();
+  return [
+    { label: t("nav.home"), to: "/" },
+    { label: t("nav.shop"), to: "/boutique" },
+    { label: t("nav.categories"), to: "/categories" },
+    { label: t("nav.promotions"), to: "/promotions" },
+    { label: t("nav.newArrivals"), to: "/nouveautes" },
+    { label: t("nav.contact"), to: "/contact" },
+  ];
+}
 
 export function Header() {
+  const { t } = useTranslation();
+  const NAV_LINKS = useNavLinks();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -48,7 +55,7 @@ export function Header() {
         <button
           className="md:hidden"
           onClick={() => setMobileOpen(true)}
-          aria-label="Ouvrir le menu"
+          aria-label={t("nav.openMenu")}
         >
           <Menu size={24} />
         </button>
@@ -75,9 +82,11 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-1 md:gap-2">
+          <LanguageSwitcher className="hidden sm:flex" />
+
           <button
             onClick={() => setSearchOpen((v) => !v)}
-            aria-label="Rechercher"
+            aria-label={t("common.search")}
             className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/10"
           >
             <Search size={20} />
@@ -85,7 +94,7 @@ export function Header() {
 
           <Link
             to="/compte/favoris"
-            aria-label="Favoris"
+            aria-label={t("nav.favorites")}
             className="relative hidden h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/10 sm:flex"
           >
             <Heart size={20} />
@@ -96,7 +105,7 @@ export function Header() {
 
           <button
             onClick={toggleCart}
-            aria-label="Panier"
+            aria-label={t("nav.cart")}
             className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/10"
           >
             <ShoppingBag size={20} />
@@ -105,7 +114,7 @@ export function Header() {
 
           <Link
             to="/compte"
-            aria-label="Mon compte"
+            aria-label={t("nav.account")}
             className="hidden h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-white/10 sm:flex"
           >
             <User size={20} />
@@ -129,10 +138,10 @@ export function Header() {
                 autoFocus
                 value={searchValue}
                 onChange={(e) => setSearchValue(e.target.value)}
-                placeholder="Rechercher un maillot, une chaussure, un ballon..."
+                placeholder={t("nav.searchPlaceholder")}
                 className="flex-1 bg-transparent text-sm text-fitora-white placeholder:text-fitora-gray-dim focus:outline-none"
               />
-              <button type="button" onClick={() => setSearchOpen(false)} aria-label="Fermer la recherche">
+              <button type="button" onClick={() => setSearchOpen(false)} aria-label={t("nav.closeSearch")}>
                 <X size={18} className="text-fitora-gray" />
               </button>
             </form>
@@ -171,7 +180,7 @@ export function Header() {
                 <span className="font-display text-xl font-extrabold">
                   FIT<span className="text-fitora-green">ORA</span>
                 </span>
-                <button onClick={() => setMobileOpen(false)} aria-label="Fermer le menu">
+                <button onClick={() => setMobileOpen(false)} aria-label={t("nav.closeMenu")}>
                   <X size={22} />
                 </button>
               </div>
@@ -198,15 +207,18 @@ export function Header() {
                   onClick={() => setMobileOpen(false)}
                   className="flex flex-1 items-center justify-center gap-2 rounded-full border border-fitora-border py-2.5 text-sm"
                 >
-                  <Heart size={16} /> Favoris
+                  <Heart size={16} /> {t("nav.account")}
                 </Link>
                 <Link
                   to="/compte"
                   onClick={() => setMobileOpen(false)}
                   className="flex flex-1 items-center justify-center gap-2 rounded-full border border-fitora-border py-2.5 text-sm"
                 >
-                  <User size={16} /> Compte
+                  <User size={16} /> {t("account.profile")}
                 </Link>
+              </div>
+              <div className="mt-4 flex justify-center">
+                <LanguageSwitcher />
               </div>
             </motion.div>
           </>

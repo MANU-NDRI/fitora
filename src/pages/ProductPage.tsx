@@ -48,6 +48,7 @@ export function ProductPage() {
   const toggleFavorite = useFavoritesStore((s) => s.toggle);
   const pushToast = useToastStore((s) => s.push);
 
+  
   useEffect(() => {
     if (!slug) return;
 
@@ -55,17 +56,34 @@ export function ProductPage() {
     setActiveImage(0);
     setQuantity(1);
 
-    getProductBySlug(slug).then((p) => {
-      setProduct(p);
+    getProductBySlug(slug)
+      .then((p) => {
+        setProduct(p);
 
-      if (p) {
-        setColor(p.variants[0]?.color);
-        setSize(p.variants.find((v) => v.size)?.size);
-        setShoeSize(p.variants.find((v) => v.shoeSize)?.shoeSize);
+        if (p) {
+          setColor(p.variants[0]?.color);
+          setSize(p.variants.find((v) => v.size)?.size);
+          setShoeSize(
+            p.variants.find((v) => v.shoeSize)?.shoeSize
+          );
 
-        getRelatedProducts(p).then(setRelated);
-      }
-    });
+          getRelatedProducts(p)
+            .then(setRelated)
+            .catch((error) => {
+              console.error(
+                "Erreur chargement produits similaires :",
+                error
+              );
+            });
+        }
+      })
+      .catch((error) => {
+        console.error(
+          "Erreur chargement fiche produit :",
+          error
+        );
+        setProduct(null);
+      });
   }, [slug]);
 
   const hasSizes =

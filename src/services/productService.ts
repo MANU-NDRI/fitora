@@ -235,6 +235,7 @@ export interface PaginatedProducts {
  */
 let productsCache: Product[] | null = null;
 let productsCacheTime = 0;
+let productsInFlight: Promise<Product[]> | null = null;
 
 const PRODUCTS_CACHE_TTL = 30_000;
 
@@ -257,9 +258,18 @@ async function fetchProducts(
     return productsCache;
   }
 
-  const { data, error } = await supabase
-    .from("products")
-    .select(`
+  // Si une requête est déjà en cours (ex : Accueil qui demande à la fois les
+  // nouveautés, les meilleures ventes et les promotions au même instant),
+  // tout le monde attend cette même requête au lieu d'en déclencher une
+  // nouvelle chacun de son côté.
+  if (!forceRefresh && productsInFlight) {
+    return productsInFlight;
+  }
+
+  productsInFlight = (async () => {
+    const { data, error } = await supabase
+      .from("products")
+      .select(`
       id,
       slug,
       name,
@@ -313,10 +323,17 @@ async function fetchProducts(
     (data ?? []) as unknown as ProductRow[]
   ).map((row) => mapProduct(row));
 
-  productsCache = products;
-  productsCacheTime = now;
+    productsCache = products;
+    productsCacheTime = now;
 
-  return products;
+    return products;
+  })();
+
+  try {
+    return await productsInFlight;
+  } finally {
+    productsInFlight = null;
+  }
 }
 
 export async function getProducts(
@@ -533,8 +550,11 @@ export async function getProductBySlug(
       });
 
   if (reviewsError) {
-    throw reviewsError;
-  }
+  console.error(
+    "Erreur de chargement des avis du produit :",
+    reviewsError
+  );
+}
 
   return mapProduct(
     data as unknown as ProductRow,
