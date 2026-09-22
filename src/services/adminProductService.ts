@@ -306,11 +306,29 @@ export async function adminDeleteProduct(
     .delete()
     .eq("id", id);
 
-  if (error) throw error;
+  if (error) {
+    // Si le produit est référencé par d'autres tables,
+    // on le désactive au lieu de le supprimer physiquement.
+    if (error.code === "23503") {
+      const { error: updateError } = await supabase
+        .from("products")
+        .update({
+          published: false,
+          out_of_stock_override: true,
+        })
+        .eq("id", id);
+
+      if (updateError) throw updateError;
+
+      invalidateProductsCache();
+      return;
+    }
+
+    throw error;
+  }
 
   invalidateProductsCache();
 }
-
 export async function adminTogglePublish(
   id: string
 ): Promise<Product | null> {
